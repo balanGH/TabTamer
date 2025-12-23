@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Icons</title>
+</head>
+<body>
+  <h1>Icon Generator</h1>
+  <p>Open browser console to download icons</p>
+  <script>
+    // Generate icons as PNG with canvas
+    function createIcon(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      // Gradient background
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+
+      // Draw clock icon
+      ctx.strokeStyle = 'white';
+      ctx.fillStyle = 'white';
+      ctx.lineWidth = size / 16;
+
+      // Clock circle
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 3, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Clock hands
+      ctx.beginPath();
+      ctx.moveTo(size / 2, size / 2);
+      ctx.lineTo(size / 2, size / 3);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(size / 2, size / 2);
+      ctx.lineTo(size * 0.65, size / 2);
+      ctx.stroke();
+
+      // Center dot
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      return canvas;
+    }
+
+    // Create and download icons
+    [16, 48, 128].forEach(size => {
+      const canvas = createIcon(size);
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `icon${size}.png`;
+        a.click();
+      });
+    });
+
+    console.log('Icons generated! Check your downloads folder.');
+  </script>
+</body>
+</html>
