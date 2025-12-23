@@ -283,3 +283,4 @@ For issues or questions, check the code comments in each file for detailed expla
 ---
 
 **Built with modern Chrome Extension best practices (Manifest V3)**
+# TabTamer
