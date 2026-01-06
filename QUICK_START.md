@@ -66,7 +66,7 @@
 
 To see background logs:
 1. Go to `chrome://extensions/`
-2. Find "Session Time Tracker"
+2. Find "Session ( Time Tracker )"
 3. Click "service worker" link
 4. DevTools opens with console logs
 

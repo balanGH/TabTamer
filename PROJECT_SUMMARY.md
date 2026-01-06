@@ -1,4 +1,4 @@
-# TabTamer Time Tracker - Project Summary
+# TabTamer ( Time Tracker ) - Project Summary
 
 ## Overview
 

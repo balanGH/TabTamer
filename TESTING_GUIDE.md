@@ -1,4 +1,4 @@
-# Testing Guide for TabTamer Time Tracker
+# Testing Guide for TabTamer ( Time Tracker )
 
 ## Pre-Installation Testing
 
@@ -242,7 +242,7 @@
 
 **Test 29: CPU Usage**
 1. [ ] Open Chrome Task Manager (Shift+Esc)
-2. [ ] Find "TabTamer Time Tracker" process
+2. [ ] Find "TabTamer ( Time Tracker )" process
 3. [ ] Browse normally for 5 minutes
 4. [ ] Check CPU usage
 5. [ ] Expected: Minimal CPU usage (<1%)

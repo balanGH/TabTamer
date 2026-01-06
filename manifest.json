@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "TabTamer Time Tracker",
+  "name": "TabTamer",
   "version": "1.0.0",
   "description": "Track active tab and audio-playing tab time with session-based analytics",
   "permissions": [
@@ -19,6 +19,7 @@
       "128": "icon128.png"
     }
   },
+  "options_page": "options.html",
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",

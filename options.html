@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TabTamer - Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>TabTamer Settings</h1>
+    </header>
+
+    <section class="section">
+      <h2>Daily Time Limits</h2>
+      <p class="description">Set daily time limits for specific domains. When the limit is reached, the site will be blocked.</p>
+
+      <div class="input-group">
+        <input type="text" id="limitDomain" placeholder="example.com" />
+        <input type="number" id="limitHours" placeholder="Hours" min="0" max="23" />
+        <input type="number" id="limitMinutes" placeholder="Minutes" min="0" max="59" />
+        <button id="addLimitBtn" class="btn-primary">Add Limit</button>
+      </div>
+
+      <div id="limitsList" class="list"></div>
+    </section>
+
+    <section class="section">
+      <h2>Element Removal Rules</h2>
+      <p class="description">Remove distracting elements from websites using CSS selectors.</p>
+
+      <div class="input-group">
+        <input type="text" id="elementDomain" placeholder="example.com" />
+        <input type="text" id="elementSelector" placeholder="CSS Selector (e.g., .ads)" />
+        <button id="addElementBtn" class="btn-primary">Add Rule</button>
+      </div>
+
+      <div id="elementsList" class="list"></div>
+    </section>
+
+    <section class="section">
+      <h2>Data Management</h2>
+      <p class="description">Export or import all your TabTamer data including usage stats, limits, and element rules.</p>
+
+      <div class="button-group">
+        <button id="exportBtn" class="btn-secondary">Export Data</button>
+        <label class="btn-secondary" for="importFile">Import Data</label>
+        <input type="file" id="importFile" accept=".json" style="display: none;" />
+      </div>
+
+      <div id="importStatus" class="status"></div>
+    </section>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

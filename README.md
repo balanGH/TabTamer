@@ -1,4 +1,4 @@
-# TabTamer Time Tracker - Chrome Extension
+# TabTamer ( Time Tracker ) - Chrome Extension
 
 A production-ready Chrome extension (Manifest V3) that tracks website usage time using **session-based storage** (in-memory). All data resets when Chrome closes.
 

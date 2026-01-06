@@ -1,4 +1,4 @@
-# Session Time Tracker - Documentation Index
+# Session ( Time Tracker ) - Documentation Index
 
 Welcome! This index helps you navigate all documentation files.
 

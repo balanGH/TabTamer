@@ -1,23 +1,40 @@
-// Popup script for Session Time Tracker
+// Popup script for Session ( Time Tracker )
 // Handles UI updates and communication with background service worker
 
 let weekChart = null;
 let monthChart = null;
 
-// For dark mode toggle
-const darkModeToggle = document.getElementById('darkModeToggle');
-chrome.storage.local.get(['darkMode'], result => {
-  if (result.darkMode) {
+// Dark mode Toggle
+chrome.storage.local.get(['preferences'], (result) => {
+  const preferences = result.preferences || { darkMode: false, checkAudio: false };
+
+  if (preferences.darkMode) {
     document.body.classList.add('dark');
-    darkModeToggle.checked = true;
+    document.getElementById('darkModeToggle').textContent = '☀';
+  }
+
+  if (preferences.checkAudio) {
+    document.getElementById('audioToggle').textContent = '🔊';
   }
 });
-darkModeToggle.addEventListener('change', () => {
-  const enabled = darkModeToggle.checked;
-  document.body.classList.toggle('dark', enabled);
-  chrome.storage.local.set({ darkMode: enabled });
+
+document.getElementById('darkModeToggle').addEventListener('click', () => {
+  chrome.storage.local.get(['preferences'], (result) => {
+    const preferences = result.preferences || {};
+    preferences.darkMode = !preferences.darkMode;
+
+    chrome.storage.local.set({ preferences }, () => {
+      document.body.classList.toggle('dark');
+      document.getElementById('darkModeToggle').textContent = preferences.darkMode ? '☀' : '⏾';
+      updateChart();
+    });
+  });
 });
 
+// Settings and Clear Data Buttons
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  chrome.runtime.openOptionsPage();
+});
 
 // Format milliseconds to human-readable time
 function formatTime(ms) {
@@ -108,16 +125,26 @@ function renderSites(sites, containerId, dateFilter = null) {
 
   container.innerHTML = topSites.map(site => {
     const time = site.filteredTime !== undefined ? site.filteredTime : site.totalTime;
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${site.domain}&sz=32`;
+
     return `
-      <div class="site-item">
-        <div class="site-info">
-          <div class="site-favicon">${getInitial(site.domain)}</div>
-          <div class="site-domain" title="${site.domain}">${site.domain}</div>
+    <div class="site-item">
+      <div class="site-info">
+        <img 
+          class="site-favicon" 
+          src="${faviconUrl}" 
+          alt="${site.domain} favicon"
+          loading="lazy"
+        />
+        <div class="site-domain" title="${site.domain}">
+          ${site.domain}
         </div>
-        <div class="site-time">${formatTime(time)}</div>
       </div>
-    `;
+      <div class="site-time">${formatTime(time)}</div>
+    </div>
+  `;
   }).join('');
+
 }
 
 // Create week chart
