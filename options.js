@@ -1,105 +1,169 @@
+const chartCtx = document.getElementById("usageChart").getContext("2d");
+let chart;
+
+// helper functions for options.js
+function getDateKey(daysAgo = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  return d.toISOString().split('T')[0];
+}
+
+function msToDisplay(ms) {
+  const minutes = ms / 60000;
+  if (minutes >= 60) {
+    return {
+      value: (minutes / 60).toFixed(1),
+      unit: 'Hours'
+    };
+  }
+  return {
+    value: Math.round(minutes),
+    unit: 'Minutes'
+  };
+}
+
+// ------------------ USAGE GRAPH ------------------
+function loadUsageGraph() {
+  const range = document.getElementById('usageRange').value;
+
+  chrome.storage.local.get(['sites'], ({ sites = {} }) => {
+    const labels = [];
+    const rawData = [];
+    const domainsForLimits = [];
+
+    Object.entries(sites).forEach(([domain, info]) => {
+      let totalMs = 0;
+
+      if (range === 'today') {
+        totalMs = info.dailyTime?.[getDateKey()] || 0;
+      }
+
+      if (range === 'week') {
+        for (let i = 0; i < 7; i++) {
+          totalMs += info.dailyTime?.[getDateKey(i)] || 0;
+        }
+      }
+
+      if (range === 'month') {
+        for (let i = 0; i < 30; i++) {
+          totalMs += info.dailyTime?.[getDateKey(i)] || 0;
+        }
+      }
+
+      if (totalMs > 0) {
+        const normalized = domain.replace(/^www\./, '');
+
+        labels.push(normalized);
+        rawData.push(totalMs);
+        domainsForLimits.push(normalized);
+      }
+    });
+
+    // 👇 THIS FIXES SET LIMIT
+    populateDomainSelect([...new Set(domainsForLimits)]);
+
+    if (!labels.length) return;
+
+    const converted = rawData.map(msToDisplay);
+    const unit = converted[0].unit;
+    const data = converted.map(d => d.value);
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(chartCtx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: unit,
+          data
+        }]
+      },
+      options: {
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: unit
+            }
+          }
+        }
+      }
+    });
+  });
+}
+document.getElementById('usageRange').addEventListener('change', loadUsageGraph);
+
+// ------------------ DOMAIN SELECT ------------------
+function populateDomainSelect(domains) {
+  const select = document.getElementById('domainSelect');
+
+  if (!domains.length) {
+    select.innerHTML = '<option value="">No data</option>';
+    return;
+  }
+
+  select.innerHTML = domains
+    .sort()
+    .map(d => `<option value="${d}">${d}</option>`)
+    .join('');
+}
+
+// ------------------ SET LIMIT ------------------
+document.getElementById("setLimitBtn").onclick = () => {
+  const domain = domainSelect.value.replace(/^www\./, '');
+  const minutes = parseInt(limitMinutes.value);
+
+  if (!domain || !minutes) return alert("Invalid input");
+
+  chrome.storage.local.get(["siteLimits"], ({ siteLimits = {} }) => {
+    siteLimits[domain] = minutes;
+    chrome.storage.local.set({ siteLimits }, loadLimits);
+  });
+};
+
+// ------------------ LOAD LIMITS ------------------
+// ------------------ LOAD LIMITS ------------------
 function loadLimits() {
-  chrome.storage.local.get(['siteLimits'], (result) => {
-    const siteLimits = result.siteLimits || {};
-    const container = document.getElementById('limitsList');
+  chrome.storage.local.get(['siteLimits'], ({ siteLimits = {} }) => {
 
     if (Object.keys(siteLimits).length === 0) {
-      container.innerHTML = '<div class="empty-state">No time limits set yet</div>';
+      limitsList.innerHTML = '<p>No limits set</p>';
       return;
     }
 
-    container.innerHTML = Object.entries(siteLimits).map(([domain, minutes]) => {
-      const hours = Math.floor(minutes / 60);
-      const mins = minutes % 60;
-      const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    // Normalize + clean
+    const cleaned = {};
+    Object.entries(siteLimits).forEach(([domain, minutes]) => {
+      const normalized = domain.replace(/^www\./, '');
+      cleaned[normalized] = minutes;
+    });
 
-      return `
+    // Persist cleaned limits (IMPORTANT)
+    chrome.storage.local.set({ siteLimits: cleaned });
+
+    limitsList.innerHTML = Object.entries(cleaned)
+      .map(([domain, minutes]) => `
         <div class="list-item">
-          <div class="list-item-content">
-            <div class="list-item-domain">${domain}</div>
-            <div class="list-item-value">Limit: ${timeStr} per day</div>
-          </div>
-          <button class="btn-remove" data-domain="${domain}" data-type="limit">Remove</button>
+          <span>${domain} – ${minutes} min</span>
+          <button class="remove-btn" data-domain="${domain}">✖</button>
         </div>
-      `;
-    }).join('');
+      `)
+      .join('');
 
-    container.querySelectorAll('.btn-remove[data-type="limit"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const domain = e.target.dataset.domain;
-        removeLimitForDomain(domain);
-      });
+    document.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.onclick = () => removeLimit(btn.dataset.domain);
     });
   });
 }
 
-function loadElementRules() {
-  chrome.storage.local.get(['elementBlockRules'], (result) => {
-    const elementBlockRules = result.elementBlockRules || {};
-    const container = document.getElementById('elementsList');
+// ------------------ REMOVE LIMIT ------------------
+function removeLimit(domain) {
+  const normalized = domain.replace(/^www\./, '');
 
-    if (Object.keys(elementBlockRules).length === 0) {
-      container.innerHTML = '<div class="empty-state">No element removal rules set yet</div>';
-      return;
-    }
-
-    container.innerHTML = Object.entries(elementBlockRules).map(([domain, selectors]) => {
-      return `
-        <div class="list-item">
-          <div class="list-item-content">
-            <div class="list-item-domain">${domain}</div>
-            <div class="list-item-selectors">
-              ${selectors.map(sel => `<span class="selector-tag">${sel}</span>`).join('')}
-            </div>
-          </div>
-          <button class="btn-remove" data-domain="${domain}" data-type="element">Remove</button>
-        </div>
-      `;
-    }).join('');
-
-    container.querySelectorAll('.btn-remove[data-type="element"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const domain = e.target.dataset.domain;
-        removeElementRulesForDomain(domain);
-      });
-    });
-  });
-}
-
-function addLimit() {
-  const domain = document.getElementById('limitDomain').value.trim().toLowerCase();
-  const hours = parseInt(document.getElementById('limitHours').value) || 0;
-  const minutes = parseInt(document.getElementById('limitMinutes').value) || 0;
-
-  if (!domain) {
-    alert('Please enter a domain');
-    return;
-  }
-
-  if (hours === 0 && minutes === 0) {
-    alert('Please enter a time limit');
-    return;
-  }
-
-  const totalMinutes = hours * 60 + minutes;
-
-  chrome.storage.local.get(['siteLimits'], (result) => {
-    const siteLimits = result.siteLimits || {};
-    siteLimits[domain] = totalMinutes;
-
-    chrome.storage.local.set({ siteLimits }, () => {
-      document.getElementById('limitDomain').value = '';
-      document.getElementById('limitHours').value = '';
-      document.getElementById('limitMinutes').value = '';
-      loadLimits();
-    });
-  });
-}
-
-function removeLimitForDomain(domain) {
-  chrome.storage.local.get(['siteLimits'], (result) => {
-    const siteLimits = result.siteLimits || {};
-    delete siteLimits[domain];
+  chrome.storage.local.get(['siteLimits'], ({ siteLimits = {} }) => {
+    delete siteLimits[normalized];
 
     chrome.storage.local.set({ siteLimits }, () => {
       loadLimits();
@@ -107,126 +171,93 @@ function removeLimitForDomain(domain) {
   });
 }
 
-function addElementRule() {
-  const domain = document.getElementById('elementDomain').value.trim().toLowerCase();
-  const selector = document.getElementById('elementSelector').value.trim();
 
-  if (!domain) {
-    alert('Please enter a domain');
-    return;
-  }
+// ------------------ CSS / ELEMENT BLOCK ------------------
+document.getElementById("saveCssBtn").onclick = () => {
+  const domain = cssDomain.value.trim().replace(/^www\./, '');
+  const rules = cssRules.value.trim();
 
-  if (!selector) {
-    alert('Please enter a CSS selector');
-    return;
-  }
+  if (!domain || !rules) return alert("Missing input");
 
-  chrome.storage.local.get(['elementBlockRules'], (result) => {
-    const elementBlockRules = result.elementBlockRules || {};
+  chrome.storage.local.get(["elementBlockRules"], ({ elementBlockRules = {} }) => {
+    elementBlockRules[domain] = rules
+      .split(",")
+      .map(r => r.trim());
 
-    if (!elementBlockRules[domain]) {
-      elementBlockRules[domain] = [];
-    }
+    chrome.storage.local.set({ elementBlockRules }, loadCssList);
+  });
+};
 
-    if (!elementBlockRules[domain].includes(selector)) {
-      elementBlockRules[domain].push(selector);
-    }
-
-    chrome.storage.local.set({ elementBlockRules }, () => {
-      document.getElementById('elementDomain').value = '';
-      document.getElementById('elementSelector').value = '';
-      loadElementRules();
-    });
+function loadCssList() {
+  chrome.storage.local.get(["elementBlockRules"], ({ elementBlockRules = {} }) => {
+    cssList.innerHTML = Object.entries(elementBlockRules)
+      .map(([d, r]) => `<div class="list-item">${d} – ${r.join(", ")}</div>`)
+      .join("");
   });
 }
 
-function removeElementRulesForDomain(domain) {
-  chrome.storage.local.get(['elementBlockRules'], (result) => {
-    const elementBlockRules = result.elementBlockRules || {};
-    delete elementBlockRules[domain];
-
-    chrome.storage.local.set({ elementBlockRules }, () => {
-      loadElementRules();
-    });
-  });
-}
-
-function exportData() {
-  chrome.storage.local.get(null, (result) => {
-    const dataStr = JSON.stringify(result, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
+// ------------------ EXPORT ------------------
+exportBtn.onclick = () => {
+  chrome.storage.local.get(null, data => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `tabtamer-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    showStatus('Data exported successfully', 'success');
   });
-}
+};
 
-function importData(file) {
+// ------------------ IMPORT ------------------
+// ------------------ IMPORT ------------------
+importBtn.onclick = () => importFile.click();
+
+importFile.onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
   const reader = new FileReader();
 
-  reader.onload = (e) => {
+  reader.onload = () => {
+    let data;
+
     try {
-      const data = JSON.parse(e.target.result);
-
-      if (!data || typeof data !== 'object') {
-        throw new Error('Invalid data format');
-      }
-
-      chrome.storage.local.clear(() => {
-        chrome.storage.local.set(data, () => {
-          showStatus('Data imported successfully', 'success');
-          loadLimits();
-          loadElementRules();
-        });
-      });
-    } catch (error) {
-      showStatus('Failed to import data: ' + error.message, 'error');
+      data = JSON.parse(reader.result);
+    } catch (err) {
+      alert("Invalid backup file");
+      return;
     }
+
+    // Validate expected structure
+    const safeData = {
+      sites: data.sites || {},
+      siteLimits: data.siteLimits || {},
+      elementBlockRules: data.elementBlockRules || {},
+      preferences: data.preferences || {
+        darkMode: false,
+        audioTracking: true
+      },
+      limitWarningsSent: {} // reset warnings safely
+    };
+
+    chrome.storage.local.set(safeData, () => {
+      // Notify background to reload in-memory state
+      chrome.runtime.sendMessage({ action: 'reloadFromStorage' }, () => {
+        loadAll();
+        alert("Backup restored successfully");
+      });
+    });
   };
 
   reader.readAsText(file);
+};
+
+
+// ------------------ INIT ------------------
+function loadAll() {
+  loadUsageGraph();
+  loadLimits();
+  loadCssList();
 }
 
-function showStatus(message, type) {
-  const statusEl = document.getElementById('importStatus');
-  statusEl.textContent = message;
-  statusEl.className = `status ${type}`;
-
-  setTimeout(() => {
-    statusEl.className = 'status';
-  }, 5000);
-}
-
-document.getElementById('addLimitBtn').addEventListener('click', addLimit);
-
-document.getElementById('limitDomain').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') addLimit();
-});
-
-document.getElementById('limitMinutes').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') addLimit();
-});
-
-document.getElementById('addElementBtn').addEventListener('click', addElementRule);
-
-document.getElementById('elementSelector').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') addElementRule();
-});
-
-document.getElementById('exportBtn').addEventListener('click', exportData);
-
-document.getElementById('importFile').addEventListener('change', (e) => {
-  if (e.target.files.length > 0) {
-    importData(e.target.files[0]);
-  }
-});
-
-loadLimits();
-loadElementRules();
+loadAll();

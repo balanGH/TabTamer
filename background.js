@@ -38,12 +38,20 @@ function initializeSite(domain) {
 // Get domain from URL
 function getDomain(url) {
   try {
-    if (!url || url.startsWith('chrome://') || url.startsWith('edge://') || url.startsWith('chrome-extension://') || url.startsWith('edge://extensions')) {
+    if (
+      !url ||
+      url.startsWith('chrome://') ||
+      url.startsWith('edge://') ||
+      url.startsWith('chrome-extension://')
+    ) {
       return null;
     }
-    const urlObj = new URL(url);
-    return urlObj.hostname;
-  } catch (e) {
+
+    const { hostname } = new URL(url);
+
+    // Normalize domain (remove www.)
+    return hostname.replace(/^www\./, '');
+  } catch {
     return null;
   }
 }
@@ -53,6 +61,31 @@ function getDateKey() {
   const now = new Date();
   return now.toISOString().split('T')[0];
 }
+
+// Helper function
+function minutes(ms) {
+  return Math.floor(ms / 60000);
+}
+
+function getWarningKey(domain) {
+  return `${domain}_${getDateKey()}`;
+}
+
+function cleanupOldWarnings() {
+  chrome.storage.local.get(['limitWarningsSent'], ({ limitWarningsSent = {} }) => {
+    const today = getDateKey();
+    const cleaned = {};
+
+    Object.keys(limitWarningsSent).forEach(key => {
+      if (key.endsWith(today)) {
+        cleaned[key] = true;
+      }
+    });
+
+    chrome.storage.local.set({ limitWarningsSent: cleaned });
+  });
+}
+
 
 // Update time for active tabs
 function updateTime() {
@@ -91,6 +124,39 @@ function updateTime() {
         site.dailyTime[dateKey] = 0;
       }
       site.dailyTime[dateKey] += elapsed;
+
+      // -------- LIMIT WARNING CHECK --------
+      chrome.storage.local.get(
+        ['siteLimits', 'limitWarningsSent'],
+        ({ siteLimits = {}, limitWarningsSent = {} }) => {
+
+          const limitMinutes = siteLimits[domain];
+          if (!limitMinutes) return;
+
+          const usedMinutes = minutes(site.dailyTime[dateKey]);
+          const remaining = limitMinutes - usedMinutes;
+
+          const warningKey = getWarningKey(domain);
+
+          if (
+            remaining <= 5 &&
+            remaining > 0 &&
+            !limitWarningsSent[warningKey]
+          ) {
+            chrome.notifications.create(
+              `limit-${domain}-${Date.now()}`,
+              {
+                type: 'basic',
+                iconUrl: 'icon128.png',
+                title: 'TabTamer – Time Limit Warning',
+                message: `${domain}\n${remaining} minute(s) remaining`
+              }
+            );
+            limitWarningsSent[warningKey] = true;
+            chrome.storage.local.set({ limitWarningsSent });
+          }
+        }
+      );
     });
   });
 }
@@ -175,7 +241,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
   } else if (request.action === 'toggleAudioTracking') {
     sessionData.trackAudioEnabled = request.enabled;
+
+    chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+      preferences.audioTracking = request.enabled;
+      chrome.storage.local.set({ preferences });
+    });
+
     sendResponse({ success: true });
+  } else if (request.action === 'reloadFromStorage') {
+    chrome.storage.local.get(
+      ['sites', 'preferences'],
+      ({ sites = {}, preferences = {} }) => {
+        sessionData.sites = sites;
+        sessionData.currentAudioTabs.clear();
+        sessionData.trackAudioEnabled = preferences.audioTracking ?? true;
+        sessionData.lastUpdateTime = Date.now();
+        sendResponse({ success: true });
+      }
+    );
   } else if (request.action === 'clearSession') {
     sessionData.sites = {};
     sessionData.lastUpdateTime = Date.now();
@@ -208,16 +291,18 @@ chrome.runtime.onInstalled.addListener(async () => {
   sessionData.isWindowFocused = window.focused;
 
   // Load audio tracking preference
-  const result = await chrome.storage.local.get(['trackAudioEnabled']);
-  if (result.trackAudioEnabled !== undefined) {
-    sessionData.trackAudioEnabled = result.trackAudioEnabled;
-  }
+  const { preferences } = await chrome.storage.local.get(['preferences']);
 
+  if (preferences) {
+    sessionData.trackAudioEnabled = preferences.audioTracking ?? true;
+  }
+  cleanupOldWarnings();
   startTimer();
 });
 
 // Start timer on service worker activation
 chrome.runtime.onStartup.addListener(() => {
+  cleanupOldWarnings();
   startTimer();
 });
 

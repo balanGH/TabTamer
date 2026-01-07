@@ -1,58 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TabTamer - Settings</title>
-  <link rel="stylesheet" href="options.css">
+  <meta charset="UTF-8" />
+  <title>TabTamer – Advanced Settings</title>
+  <link rel="stylesheet" href="options.css" />
 </head>
+
 <body>
   <div class="container">
-    <header>
-      <h1>TabTamer Settings</h1>
-    </header>
+    <h1>TabTamer Settings</h1>
 
-    <section class="section">
-      <h2>Daily Time Limits</h2>
-      <p class="description">Set daily time limits for specific domains. When the limit is reached, the site will be blocked.</p>
+    <!-- USAGE GRAPH -->
+    <section class="card">
+      <h2>Site Usage</h2>
 
-      <div class="input-group">
-        <input type="text" id="limitDomain" placeholder="example.com" />
-        <input type="number" id="limitHours" placeholder="Hours" min="0" max="23" />
-        <input type="number" id="limitMinutes" placeholder="Minutes" min="0" max="59" />
-        <button id="addLimitBtn" class="btn-primary">Add Limit</button>
+      <div class="row">
+        <select id="usageRange">
+          <option value="today">Today</option>
+          <option value="week">Week</option>
+          <option value="month">Month</option>
+        </select>
       </div>
 
-      <div id="limitsList" class="list"></div>
+      <canvas id="usageChart"></canvas>
     </section>
 
-    <section class="section">
-      <h2>Element Removal Rules</h2>
-      <p class="description">Remove distracting elements from websites using CSS selectors.</p>
-
-      <div class="input-group">
-        <input type="text" id="elementDomain" placeholder="example.com" />
-        <input type="text" id="elementSelector" placeholder="CSS Selector (e.g., .ads)" />
-        <button id="addElementBtn" class="btn-primary">Add Rule</button>
+    <!-- TIME LIMITS -->
+    <section class="card">
+      <h2>Set Daily Time Limit</h2>
+      <div class="row">
+        <select id="domainSelect"></select>
+        <input type="number" id="limitMinutes" placeholder="Minutes" />
+        <button id="setLimitBtn">Set</button>
       </div>
-
-      <div id="elementsList" class="list"></div>
+      <div id="limitsList"></div>
     </section>
 
-    <section class="section">
-      <h2>Data Management</h2>
-      <p class="description">Export or import all your TabTamer data including usage stats, limits, and element rules.</p>
-
-      <div class="button-group">
-        <button id="exportBtn" class="btn-secondary">Export Data</button>
-        <label class="btn-secondary" for="importFile">Import Data</label>
-        <input type="file" id="importFile" accept=".json" style="display: none;" />
+    <!-- ELEMENT / CSS BLOCK -->
+    <section class="card">
+      <h2>Custom CSS / Element Block</h2>
+      <div class="row">
+        <input id="cssDomain" placeholder="example.com" />
+        <textarea id="cssRules" placeholder=".shorts, #ads { display:none }"></textarea>
+        <button id="saveCssBtn">Save</button>
       </div>
+      <div id="cssList"></div>
+    </section>
 
-      <div id="importStatus" class="status"></div>
+    <!-- BACKUP -->
+    <section class="card">
+      <h2>Backup & Restore</h2>
+      <button id="exportBtn">Export Backup</button>
+      <input type="file" id="importFile" hidden />
+      <button id="importBtn">Import Backup</button>
+      <p id="status"></p>
     </section>
   </div>
 
+  <script src="chart.min.js"></script>
   <script src="options.js"></script>
 </body>
+
 </html>

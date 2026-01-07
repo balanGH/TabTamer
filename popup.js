@@ -4,29 +4,50 @@
 let weekChart = null;
 let monthChart = null;
 
-// Dark mode Toggle
-chrome.storage.local.get(['preferences'], (result) => {
-  const preferences = result.preferences || { darkMode: false, checkAudio: false };
+// Load user preferences from local storage
+chrome.storage.local.get(['preferences'], ({ preferences }) => {
+  const prefs = {
+    darkMode: false,
+    audioTracking: true,
+    ...preferences
+  };
 
-  if (preferences.darkMode) {
-    document.body.classList.add('dark');
-    document.getElementById('darkModeToggle').textContent = '☀';
-  }
+  document.body.classList.toggle('dark', prefs.darkMode);
+  document.getElementById('darkModeToggle').textContent =
+    prefs.darkMode ? '☀' : '⏾';
 
-  if (preferences.checkAudio) {
-    document.getElementById('audioToggle').textContent = '🔊';
-  }
+  document.getElementById('audioToggle').textContent =
+    prefs.audioTracking ? '🔊' : '🔇';
 });
 
+// Dark Mode Toggle
 document.getElementById('darkModeToggle').addEventListener('click', () => {
-  chrome.storage.local.get(['preferences'], (result) => {
-    const preferences = result.preferences || {};
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
     preferences.darkMode = !preferences.darkMode;
 
     chrome.storage.local.set({ preferences }, () => {
-      document.body.classList.toggle('dark');
-      document.getElementById('darkModeToggle').textContent = preferences.darkMode ? '☀' : '⏾';
-      updateChart();
+      document.body.classList.toggle('dark', preferences.darkMode);
+      document.getElementById('darkModeToggle').textContent =
+        preferences.darkMode ? '☀' : '⏾';
+    });
+  });
+});
+
+// Audio Tracking Toggle
+document.getElementById('audioToggle').addEventListener('click', () => {
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+    const enabled = !preferences.audioTracking;
+
+    preferences.audioTracking = enabled;
+
+    chrome.storage.local.set({ preferences }, () => {
+      chrome.runtime.sendMessage({
+        action: 'toggleAudioTracking',
+        enabled
+      });
+
+      document.getElementById('audioToggle').textContent =
+        enabled ? '🔊' : '🔇';
     });
   });
 });
@@ -49,7 +70,7 @@ function formatTime(ms) {
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   }
 
-  return `${minutes}m`;
+  return `${minutes}m ${seconds % 60}s`;
 }
 
 // Get date key (YYYY-MM-DD)
@@ -323,9 +344,6 @@ async function loadData() {
   chrome.runtime.sendMessage({ action: 'getSessionData' }, (response) => {
     if (response) {
       updateUI(response);
-
-      // Update audio toggle
-      document.getElementById('audioToggle').checked = response.trackAudioEnabled;
     }
   });
 }
@@ -342,18 +360,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     // Update panels
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById(tabName).classList.add('active');
-  });
-});
-
-// Audio toggle
-document.getElementById('audioToggle').addEventListener('change', (e) => {
-  const enabled = e.target.checked;
-  chrome.runtime.sendMessage({
-    action: 'toggleAudioTracking',
-    enabled: enabled
-  }, () => {
-    // Save to local storage for persistence across sessions
-    chrome.storage.local.set({ trackAudioEnabled: enabled });
   });
 });
 

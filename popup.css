@@ -18,11 +18,6 @@ body.dark {
   color: #e0e0e0;
 }
 
-/* 
-body.dark header {
-  background: linear-gradient(135deg, #232526, #414345);
-} */
-
 body.dark .tabs {
   background: #1e1e1e;
 }
@@ -32,9 +27,8 @@ body.dark .tab-btn {
 }
 
 body.dark .tab-btn.active {
-  color: #8fa8ff;
-  border-bottom-color: #8fa8ff;
-  background: #1e1e1e;
+  color: #8fbaff;
+  background: #4b4a4a;
 }
 
 body.dark .icon-btn {
@@ -56,6 +50,10 @@ body.dark .site-item {
 
 body.dark .site-item:hover {
   background: #333;
+}
+
+body.dark .site-time {
+  color: #8fbaff;
 }
 
 body.dark footer {
@@ -149,6 +147,7 @@ h1 {
   cursor: pointer;
   transition: all 0.2s;
   border-bottom: 3px solid transparent;
+  border-radius: 12px;
 }
 
 .tab-btn:hover {
@@ -157,9 +156,8 @@ h1 {
 }
 
 .tab-btn.active {
-  color: #667eea;
-  border-bottom-color: #667eea;
-  background: white;
+  color: #2b4cdc;
+  background: #929dce;
 }
 
 .tab-content {
@@ -261,7 +259,7 @@ h1 {
   width: 24px;
   height: 24px;
   border-radius: 6px;
-  background: #667eea;
+  background: #ffffff;
   color: white;
   display: flex;
   align-items: center;
@@ -301,6 +299,7 @@ footer {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  border-radius: 12px;
 }
 
 .clear-btn {
