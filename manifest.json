@@ -5,7 +5,10 @@
   "description": "Track active tab and audio-playing tab time with session-based analytics",
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "notifications",
+    "activeTab",
+    "alarms"
   ],
   "background": {
     "service_worker": "background.js",
@@ -19,6 +22,29 @@
       "128": "icon128.png"
     }
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "blocked.html",
+        "blocked.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "contentToast.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "options_page": "options.html",
   "icons": {
     "16": "icon16.png",

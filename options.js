@@ -1,25 +1,11 @@
 const chartCtx = document.getElementById("usageChart").getContext("2d");
 let chart;
 
-// helper functions for options.js
+// Helper function to get the date key (YYYY-MM-DD format)
 function getDateKey(daysAgo = 0) {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
   return d.toISOString().split('T')[0];
-}
-
-function msToDisplay(ms) {
-  const minutes = ms / 60000;
-  if (minutes >= 60) {
-    return {
-      value: (minutes / 60).toFixed(1),
-      unit: 'Hours'
-    };
-  }
-  return {
-    value: Math.round(minutes),
-    unit: 'Minutes'
-  };
 }
 
 // ------------------ USAGE GRAPH ------------------
@@ -31,6 +17,8 @@ function loadUsageGraph() {
     const rawData = [];
     const domainsForLimits = [];
 
+    let maxValue = 0; // track max in ms
+
     Object.entries(sites).forEach(([domain, info]) => {
       let totalMs = 0;
 
@@ -40,34 +28,55 @@ function loadUsageGraph() {
 
       if (range === 'week') {
         for (let i = 0; i < 7; i++) {
-          totalMs += info.dailyTime?.[getDateKey(i)] || 0;
+          const dateKey = getDateKey(i);
+          totalMs += info.dailyTime?.[dateKey] || 0;
         }
       }
 
       if (range === 'month') {
         for (let i = 0; i < 30; i++) {
-          totalMs += info.dailyTime?.[getDateKey(i)] || 0;
+          const dateKey = getDateKey(i);
+          totalMs += info.dailyTime?.[dateKey] || 0;
         }
       }
 
       if (totalMs > 0) {
         const normalized = domain.replace(/^www\./, '');
-
         labels.push(normalized);
         rawData.push(totalMs);
         domainsForLimits.push(normalized);
+        maxValue = Math.max(maxValue, totalMs);
       }
     });
 
-    // 👇 THIS FIXES SET LIMIT
     populateDomainSelect([...new Set(domainsForLimits)]);
-
     if (!labels.length) return;
 
-    const converted = rawData.map(msToDisplay);
-    const unit = converted[0].unit;
-    const data = converted.map(d => d.value);
+    // Decide unit + divisor for conversion
+    let unit, divisor, yMax;
 
+    if (range === 'today') {
+      unit = 'Minutes';
+      divisor = 60000; // ms → minutes
+      yMax = maxValue / divisor;     // cap at 24h in minutes
+    } else if (maxValue >= 1000 * 60 * 60 * 24) {
+      unit = 'Days';
+      divisor = 1000 * 60 * 60 * 24; // ms → days
+      yMax = maxValue / divisor;
+    } else if (maxValue >= 1000 * 60 * 60) {
+      unit = 'Hours';
+      divisor = 1000 * 60 * 60; // ms → hours
+      yMax = maxValue / divisor;
+    } else {
+      unit = 'Minutes';
+      divisor = 60000; // ms → minutes
+      yMax = maxValue / divisor;
+    }
+
+    // Convert all rawData into chosen unit
+    const data = rawData.map(ms => +(ms / divisor).toFixed(1));
+
+    // Destroy existing chart if present
     if (chart) chart.destroy();
 
     chart = new Chart(chartCtx, {
@@ -83,9 +92,32 @@ function loadUsageGraph() {
         scales: {
           y: {
             beginAtZero: true,
+            max: yMax,
             title: {
               display: true,
               text: unit
+            }
+          }
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                const ms = rawData[context.dataIndex];
+                const minutes = Math.floor(ms / 60000);
+                const hours = Math.floor(minutes / 60);
+                const days = Math.floor(hours / 24);
+
+                if (days >= 1) {
+                  const remHours = hours % 24;
+                  return `${days}d ${remHours}h`;
+                } else if (hours >= 1) {
+                  const remMin = minutes % 60;
+                  return `${hours}h ${remMin}m`;
+                } else {
+                  return `${minutes}m`;
+                }
+              }
             }
           }
         }
@@ -93,6 +125,7 @@ function loadUsageGraph() {
     });
   });
 }
+
 document.getElementById('usageRange').addEventListener('change', loadUsageGraph);
 
 // ------------------ DOMAIN SELECT ------------------
@@ -123,7 +156,6 @@ document.getElementById("setLimitBtn").onclick = () => {
   });
 };
 
-// ------------------ LOAD LIMITS ------------------
 // ------------------ LOAD LIMITS ------------------
 function loadLimits() {
   chrome.storage.local.get(['siteLimits'], ({ siteLimits = {} }) => {
@@ -171,7 +203,6 @@ function removeLimit(domain) {
   });
 }
 
-
 // ------------------ CSS / ELEMENT BLOCK ------------------
 document.getElementById("saveCssBtn").onclick = () => {
   const domain = cssDomain.value.trim().replace(/^www\./, '');
@@ -208,7 +239,6 @@ exportBtn.onclick = () => {
   });
 };
 
-// ------------------ IMPORT ------------------
 // ------------------ IMPORT ------------------
 importBtn.onclick = () => importFile.click();
 
@@ -251,7 +281,6 @@ importFile.onchange = e => {
 
   reader.readAsText(file);
 };
-
 
 // ------------------ INIT ------------------
 function loadAll() {

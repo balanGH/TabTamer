@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Site Blocked – TabTamer</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+        Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: #fff;
+      border-radius: 24px;
+      padding: 60px 40px;
+      text-align: center;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    }
+
+    .icon {
+      font-size: 80px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 36px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 12px;
+    }
+
+    .domain {
+      font-size: 22px;
+      font-weight: 600;
+      color: #667eea;
+      margin-bottom: 24px;
+      word-break: break-word;
+    }
+
+    .message {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 32px;
+    }
+
+    .message p {
+      font-size: 16px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    button {
+      padding: 16px 32px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="icon">⏰</div>
+
+    <h1>Time Limit Reached</h1>
+    <div class="domain" id="blockedDomain"></div>
+
+    <div class="message">
+      <p>
+        You’ve reached your daily time limit for this site.
+        Take a break and come back tomorrow.
+      </p>
+    </div>
+
+    <button id="manageSettings">Manage Settings</button>
+  </div>
+
+  <!-- External JS ONLY (MV3 compliant) -->
+  <script src="blocked.js"></script>
+</body>
+
+</html>

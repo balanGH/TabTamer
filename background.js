@@ -35,6 +35,9 @@ function initializeSite(domain) {
   return sessionData.sites[domain];
 }
 
+// blocked Tabs set
+const blockedTabs = new Set();
+
 // Get domain from URL
 function getDomain(url) {
   try {
@@ -60,11 +63,6 @@ function getDomain(url) {
 function getDateKey() {
   const now = new Date();
   return now.toISOString().split('T')[0];
-}
-
-// Helper function
-function minutes(ms) {
-  return Math.floor(ms / 60000);
 }
 
 function getWarningKey(domain) {
@@ -133,30 +131,78 @@ function updateTime() {
           const limitMinutes = siteLimits[domain];
           if (!limitMinutes) return;
 
-          const usedMinutes = minutes(site.dailyTime[dateKey]);
-          const remaining = limitMinutes - usedMinutes;
+          // const usedMinutes = minutes(site.dailyTime[dateKey]);
+          // const remaining = limitMinutes - usedMinutes;
+          const limitMs = limitMinutes * 60000;
+          const usedMs = site.dailyTime[dateKey];
+          const remainingMs = limitMs - usedMs;
+          const remainingMinutes = Math.ceil(remainingMs / 60000);
 
           const warningKey = getWarningKey(domain);
-
           if (
-            remaining <= 5 &&
-            remaining > 0 &&
+            (remainingMinutes === 5 || remainingMinutes <= 2) && remainingMinutes > 0 &&
             !limitWarningsSent[warningKey]
           ) {
+            // System notification
             chrome.notifications.create(
               `limit-${domain}-${Date.now()}`,
               {
                 type: 'basic',
                 iconUrl: 'icon128.png',
                 title: 'TabTamer – Time Limit Warning',
-                message: `${domain}\n${remaining} minute(s) remaining`
+                message: `${domain}\n${remainingMinutes} minute(s) remaining`
               }
             );
+
+            // In-page browser-style toast
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+              if (tabs[0]) {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                  action: 'showToast',
+                  message: `${domain}: 2 minutes remaining!`
+                }).catch(() => {
+                  // Tab may not be injectable (chrome:// pages etc.)
+                });
+              }
+            });
             limitWarningsSent[warningKey] = true;
             chrome.storage.local.set({ limitWarningsSent });
           }
+
         }
       );
+
+      // -------- LIMIT ENFORCEMENT --------
+      chrome.storage.local.get(['siteLimits'], ({ siteLimits = {} }) => {
+        const limitMinutes = siteLimits[domain];
+        if (!limitMinutes) return;
+
+        const limitMs = limitMinutes * 60000;
+        const usedMs = site.dailyTime[dateKey];
+
+        if (usedMs >= limitMs) {
+          // Already blocked this tab?
+          if (!blockedTabs.has(tabId)) {
+            blockedTabs.add(tabId);
+
+            chrome.tabs.update(tabId, {
+              url: chrome.runtime.getURL(
+                `blocked.html?domain=${encodeURIComponent(domain)}`
+              )
+            });
+
+            chrome.notifications.create(
+              `limit-exceeded-${tabId}-${Date.now()}`,
+              {
+                type: 'basic',
+                iconUrl: 'icon128.png',
+                title: 'TabTamer – Limit Reached',
+                message: `${domain} has reached your daily time limit.`
+              }
+            );
+          }
+        }
+      });
     });
   });
 }
@@ -169,13 +215,18 @@ function startTimer() {
   updateTimer = setInterval(updateTime, UPDATE_INTERVAL);
 }
 
-// Stop the update timer
-function stopTimer() {
-  if (updateTimer) {
-    clearInterval(updateTimer);
-    updateTimer = null;
-  }
+function resetBlockedTabs() {
+  blockedTabs.clear();
 }
+
+chrome.alarms.create('dailyResetBlockedTabs', { periodInMinutes: 1440 });
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'dailyResetBlockedTabs') {
+    resetBlockedTabs();
+  }
+});
+
 
 // Handle tab activation
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
@@ -301,10 +352,18 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 // Start timer on service worker activation
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
   cleanupOldWarnings();
+  const { sites = {}, preferences = {} } =
+    await chrome.storage.local.get(['sites', 'preferences']);
+
+  sessionData.sites = sites;
+  sessionData.trackAudioEnabled = preferences.audioTracking ?? true;
+  sessionData.lastUpdateTime = Date.now();
+
   startTimer();
 });
+
 
 // Keep service worker alive (MV3 workaround)
 chrome.runtime.onConnect.addListener((port) => {
@@ -317,3 +376,13 @@ chrome.runtime.onConnect.addListener((port) => {
 
 // Start timer immediately
 startTimer();
+
+(async function restoreStateOnLoad() {
+  const { sites = {}, preferences = {} } =
+    await chrome.storage.local.get(['sites', 'preferences']);
+
+  sessionData.sites = sites;
+  sessionData.trackAudioEnabled = preferences.audioTracking ?? true;
+  sessionData.lastUpdateTime = Date.now();
+})();
+
