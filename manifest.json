@@ -1,14 +1,16 @@
 {
   "manifest_version": 3,
   "name": "TabTamer",
-  "version": "1.0.0",
-  "description": "Track active tab and audio-playing tab time with session-based analytics",
+  "version": "2.0.0",
+  "version_name": "Blocker + Analytics v2",
+  "description": "Track active tab and audio-playing tab time with session-based analytics, and temporarily block webpage elements.",
   "permissions": [
     "tabs",
     "storage",
     "notifications",
     "activeTab",
-    "alarms"
+    "alarms",
+    "scripting"
   ],
   "background": {
     "service_worker": "background.js",
@@ -25,8 +27,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "blocked.html",
-        "blocked.js"
+        "pages/blocked.html",
+        "pages/blocked.js"
       ],
       "matches": [
         "<all_urls>"
@@ -40,7 +42,9 @@
         "https://*/*"
       ],
       "js": [
-        "contentToast.js"
+        "contentToast.js",
+        "contentBlocker.js",
+        "contentScript.js"
       ],
       "run_at": "document_idle"
     }

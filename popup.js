@@ -20,6 +20,91 @@ chrome.storage.local.get(['preferences'], ({ preferences }) => {
     prefs.audioTracking ? '🔊' : '🔇';
 });
 
+// -------------------- Block Element Button (MV3 safe) --------------------
+document.getElementById("blockElementBtn").onclick = async () => {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tabs[0] || !tabs[0].id) return;
+
+  // Check if we're on a valid URL (not chrome://, edge://, about:, etc.)
+  const url = tabs[0].url || '';
+
+  // List of restricted URL schemes
+  const restrictedSchemes = [
+    'chrome://',
+    'edge://',
+    'about:',
+    'chrome-extension://',
+    'moz-extension://',
+    'view-source:',
+    'data:',
+    'brave://',
+    'opera://'
+  ];
+
+  // Check if URL is restricted
+  const isRestricted = restrictedSchemes.some(scheme => url.startsWith(scheme));
+
+  if (isRestricted) {
+    // Show user-friendly message
+    alert("Element picker cannot be used on browser internal pages (chrome://, edge://, etc.). Please navigate to a regular website and try again.");
+
+    // Re-enable button
+    const btn = document.getElementById("blockElementBtn");
+    btn.disabled = false;
+    btn.style.opacity = "1";
+    return;
+  }
+
+  // Disable button to prevent double clicks
+  const btn = document.getElementById("blockElementBtn");
+  btn.disabled = true;
+  btn.style.opacity = "0.5";
+
+  try {
+    // Try to send message first (while popup is still open)
+    try {
+      await chrome.tabs.sendMessage(tabs[0].id, { action: "START_ELEMENT_PICKER" });
+      console.log("Picker message sent to existing content script");
+    } catch (error) {
+      // Content script not loaded, inject it
+      console.log("Content script not found, injecting...");
+
+      // Check if we can inject scripts on this page
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tabs[0].id },
+          files: ['src/content/contentScript.js']
+        });
+
+        // Wait for script to initialize
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        // Send message again
+        await chrome.tabs.sendMessage(tabs[0].id, { action: "START_ELEMENT_PICKER" });
+        console.log("Picker message sent after injection");
+      } catch (injectError) {
+        console.error("Cannot inject script on this page:", injectError);
+        alert("Element picker cannot be used on this type of page. Please navigate to a regular website.");
+
+        // Re-enable button
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        return;
+      }
+    }
+
+    // Close popup after message is sent
+    window.close();
+
+  } catch (error) {
+    console.error("Failed to start element picker:", error);
+    // Re-enable button if there's an error
+    btn.disabled = false;
+    btn.style.opacity = "1";
+    alert("Failed to start element picker. Please try again on a regular website.");
+  }
+};
+
 // Dark Mode Toggle
 document.getElementById('darkModeToggle').addEventListener('click', () => {
   chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
@@ -58,19 +143,25 @@ document.getElementById('settingsBtn').addEventListener('click', () => {
 });
 
 // Format milliseconds to human-readable time
+// Replace formatTime function with improved version:
+
 function formatTime(ms) {
-  if (ms < 1000) return '0m';
+  if (ms < 1000) return '0s';
 
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
 
+  // Return appropriate format
   if (hours > 0) {
     const remainingMinutes = minutes % 60;
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  } else if (minutes > 0) {
+    const remainingSeconds = seconds % 60;
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  } else {
+    return `${seconds}s`;
   }
-
-  return `${minutes}m ${seconds % 60}s`;
 }
 
 // Get date key (YYYY-MM-DD)
@@ -168,10 +259,25 @@ function renderSites(sites, containerId, dateFilter = null) {
 
 }
 
+// Add cleanup function before creating new charts
+function cleanupCharts() {
+  if (weekChart) {
+    weekChart.destroy();
+    weekChart = null;
+  }
+  if (monthChart) {
+    monthChart.destroy();
+    monthChart = null;
+  }
+}
+
 // Create week chart
 function createWeekChart(sites) {
   const ctx = document.getElementById('weekChart');
   if (!ctx) return;
+
+  // Cleanup existing charts
+  cleanupCharts();
 
   // Prepare data for last 7 days (Mon-Sun)
   const labels = [];
@@ -340,6 +446,7 @@ function updateUI(sessionData) {
 }
 
 // Load session data
+let refreshInterval;
 async function loadData() {
   chrome.runtime.sendMessage({ action: 'getSessionData' }, (response) => {
     if (response) {
@@ -347,6 +454,13 @@ async function loadData() {
     }
   });
 }
+// Clean up when popup closes
+window.addEventListener('unload', () => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+  }
+  cleanupCharts();
+});
 
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -382,4 +496,47 @@ port.onDisconnect.addListener(() => {
 loadData();
 
 // Refresh data every 2 seconds
-setInterval(loadData, 2000);
+setInterval(loadData, 1000);
+
+// Wrap all storage operations with error handling
+async function safeStorageOperation(operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    console.error('Storage operation failed:', error);
+    showError('Failed to save settings. Please try again.');
+    return null;
+  }
+}
+
+function showError(message) {
+  const errorEl = document.createElement('div');
+  errorEl.className = 'error-toast';
+  errorEl.textContent = message;
+  errorEl.style.cssText = `
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: #ff4757;
+    color: white;
+    padding: 12px;
+    border-radius: 6px;
+    z-index: 9999;
+  `;
+  document.body.appendChild(errorEl);
+  setTimeout(() => errorEl.remove(), 3000);
+}
+
+// Update storage operations example
+document.getElementById('darkModeToggle').addEventListener('click', () => {
+  safeStorageOperation(async () => {
+    const { preferences = {} } = await chrome.storage.local.get(['preferences']);
+    preferences.darkMode = !preferences.darkMode;
+
+    await chrome.storage.local.set({ preferences });
+
+    document.body.classList.toggle('dark', preferences.darkMode);
+    document.getElementById('darkModeToggle').textContent =
+      preferences.darkMode ? '☀' : '⏾';
+  });
+});

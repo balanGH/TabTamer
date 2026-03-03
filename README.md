@@ -1,58 +1,81 @@
-# TabTamer ( Time Tracker ) - Chrome Extension
+# TabTamer (Time Tracker & Element Blocker) - Chrome Extension
 
-A production-ready Chrome extension (Manifest V3) that tracks website usage time using **session-based storage** (in-memory). All data resets when Chrome closes.
+A production-ready Chrome extension (Manifest V3) that tracks website usage time **persistently across sessions** and allows temporarily blocking webpage elements using an element picker. **Time tracking persists**, but picker blocks reset when Chrome closes.
+
+---
 
 ## Features
 
 ✅ **Smart Time Tracking**
-- Tracks active tab time only when browser window is focused
-- Tracks ANY background tab playing audio (not YouTube-only)
-- Stops counting when tab closes, audio stops, or browser is unfocused
+
+* Tracks active tab time only when browser window is focused
+* Tracks any background tab playing audio (not YouTube-only)
+* Stops counting when tab closes, audio stops, or browser is unfocused
+
+✅ **Element Blocker**
+
+* Click the ⛶ button to enter element picker mode
+* Hover over webpage elements – shows gray dotted outline
+* Click element to temporarily hide it
+* Confirmation box appears on webpage with Block/Cancel buttons
+* Works on dynamic websites (YouTube, SPAs) with MutationObserver
 
 ✅ **Session-Based Storage**
-- All data stored in-memory (resets when Chrome closes)
-- No persistent storage - privacy-friendly
-- Supports analytics for current session
+
+* All tracking data stored in-memory (resets when Chrome closes)
+* No persistent storage for temporary picker blocks – privacy-friendly
+* Supports analytics for the current session
 
 ✅ **Beautiful Analytics UI**
-- Today/Week/Month tabs with interactive charts
-- Weekly bar chart (Mon → Sun) showing total minutes per day
-- Monthly bar chart (last 30 days) showing total minutes per day
-- Top sites section sorted by total time
+
+* Today/Week/Month tabs with interactive charts
+* Weekly bar chart (Mon → Sun) showing total minutes per day
+* Monthly bar chart (last 30 days) showing total minutes per day
+* Top sites section sorted by total time
 
 ✅ **User Controls**
-- Toggle for tracking background audio
-- Clear session data button
-- Real-time updates every 2 seconds
+
+* Toggle for tracking background audio
+* Clear session data button
+* Real-time updates every 2 seconds
+* Dark mode toggle with persistent preferences
+
+---
 
 ## File Structure
 
 ```
-extension/
-├── manifest.json          # Extension configuration (MV3)
-├── background.js          # Service worker with time tracking logic
-├── popup.html            # Extension popup UI
-├── popup.css             # Modern, minimal styling
-├── popup.js              # UI logic and chart rendering
-├── chart.min.js          # Chart.js library (local, no CDN)
-├── icon16.png            # Extension icon (16x16)
-├── icon48.png            # Extension icon (48x48)
-├── icon128.png           # Extension icon (128x128)
-├── create-icons.html     # Helper to generate icons
-└── README.md             # This file
+TabTamer/
+├── README.md                    # Project overview & documentation
+├── PROJECT_SUMMARY.md           # High-level architecture & features
+├── QUICK_START.md               # Installation & quick usage guide
+├── TESTING_GUIDE.md             # Manual testing checklist
+├── manifest.json                # Extension configuration (Manifest V3)
+├── background.js                # Service worker: time tracking & limit enforcement
+├── popup.html                   # Extension popup UI
+├── popup.js                     # Popup logic & chart rendering
+├── popup.css                    # Popup styling
+├── options.html                 # Settings page UI
+├── options.js                   # Settings logic (limits, rules, toggles)
+├── options.css                  # Settings styling
+├── blocked.html                 # Page shown when time limit is reached
+├── blocked.js                   # Blocked page logic
+├── contentScript.js             # Element picker & confirmation UI
+├── contentBlocker.js            # Auto-hides blocked elements
+├── contentToast.js              # In-page toast notifications
+├── chart.min.js                 # Local Chart.js library (no CDN dependency)
+├── icon16.png                   # Extension icon (16x16)
+├── icon48.png                   # Extension icon (48x48)
+├── icon128.png                  # Extension icon (128x128)
+├── generate_icons.py            # Python script for generating icons
+└── create-icons.html            # Icon creation/testing page
 ```
+
+---
 
 ## Installation Instructions
 
-### Step 1: Generate Icons
-
-1. Open `create-icons.html` in Chrome
-2. Three PNG icons will download automatically (icon16.png, icon48.png, icon128.png)
-3. Move the downloaded icons to the `extension/` folder
-
-**Alternative:** Use any 16x16, 48x48, and 128x128 PNG icons you prefer
-
-### Step 2: Load Extension in Chrome
+### Step 1: Load Extension in Chrome
 
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable **Developer mode** (toggle in top-right corner)
@@ -60,227 +83,161 @@ extension/
 4. Select the `extension/` folder
 5. The extension icon will appear in your toolbar
 
-### Step 3: Start Tracking
+### Step 2: Start Using
 
 1. Click the extension icon to open the popup
-2. Browse websites normally
-3. Time tracking happens automatically
+2. Browse websites normally – time tracking happens automatically
+3. Click the ⛶ button to block distracting elements
 4. View analytics in Today/Week/Month tabs
 
-## How It Works
+---
 
-### Time Tracking Logic
+## How Element Blocker Works
 
-**Active Tab Tracking:**
-- Tracks ONLY when browser window is focused
-- Tracks ONLY the currently active tab
-- Stops immediately when you switch tabs or unfocus window
+### Element Picker Mode
 
-**Audio Tab Tracking:**
-- Tracks ANY tab playing audio (can be toggled on/off)
-- Works for YouTube, Spotify, podcasts, any audio source
-- Automatically detects when audio starts/stops
-- Continues tracking even if tab is in background
+1. Click the ⛶ button in the popup
+2. Popup closes automatically
+3. Hover over webpage elements – gray dotted outline appears
+4. Click an element to temporarily hide it
+5. Confirmation box appears in top-right corner
+6. Click **Block** to hide permanently, or **Cancel** to restore (temporary picker blocks reset on close)
 
-**Edge Cases Handled:**
-- ✅ Muted tabs: Not tracked (audio must be audible)
-- ✅ Multiple audio tabs: All tracked independently
-- ✅ Service worker sleep: Uses timers and in-memory storage
-- ✅ Tab closed: Immediately stops tracking
-- ✅ Chrome minimized: Stops all tracking
+### Confirmation Box
+
+* Shows domain name
+* Shows CSS selector of clicked element
+* Block and Cancel buttons
+* Auto-cancels after 10 seconds if no action is taken
+
+### Automatic Element Blocking
+
+* Block rules saved in `chrome.storage.local` (persistent if saved manually)
+* Future visits to same domain auto-hide elements
+* MutationObserver handles dynamically loaded content (YouTube, SPAs)
+
+### Storage Format
+
+```javascript
+elementBlockRules = {
+  "youtube.com": [
+    "#shorts",
+    ".ytd-reel-shelf-renderer",
+    "ytd-rich-section-renderer"
+  ],
+  "facebook.com": [
+    "[aria-label=\"Stories\"]",
+    "div[role=\"complementary\"]"
+  ]
+}
+```
+
+---
+
+## Time Tracking Logic
+
+### Active Tab Tracking
+
+* Tracks only when browser window is focused
+* Tracks only the currently active tab
+* Stops immediately when switching tabs or unfocusing
+
+### Audio Tab Tracking
+
+* Tracks any tab playing audio (toggle on/off)
+* Works for YouTube, Spotify, podcasts, any audio source
+* Detects when audio starts/stops
+* Continues tracking even if tab is in background
+
+### Edge Cases Handled
+
+✅ Muted tabs not tracked
+✅ Multiple audio tabs tracked independently
+✅ Service worker sleep handled via timers and in-memory storage
+✅ Tab closed → stops tracking
+✅ Chrome minimized → stops tracking
 
 ### Storage Architecture
 
-**In-Memory Storage:**
 ```javascript
 sessionData = {
   sites: {
     "example.com": {
       domain: "example.com",
       totalTime: 123456,        // Total milliseconds
-      dailyTime: {
-        "2025-12-23": 123456    // Per-day breakdown
-      }
+      dailyTime: { "2025-12-23": 123456 }
     }
   },
-  currentActiveTab: 123,         // Tab ID
-  currentAudioTabs: Set([456]), // Set of tab IDs
+  currentActiveTab: 123,
+  currentAudioTabs: new Set([456]),
   isWindowFocused: true,
   lastUpdateTime: 1703345678900
 }
 ```
 
-**Time Update Cycle:**
-1. Timer runs every 1 second (1000ms)
-2. Calculates elapsed time since last update
-3. Adds time to tracked tabs (active + audio tabs)
-4. Stores in daily breakdown for analytics
-5. Updates in-memory storage only
+### Time Update Cycle
 
-**Session Persistence:**
-- ✅ Data persists while Chrome is running
-- ✅ Survives tab closes and reopens
-- ✅ Survives extension reload
-- ❌ Resets when Chrome closes (by design)
-
-### Analytics Calculations
-
-**Today Tab:**
-- Shows total time for current date
-- Displays top 10 sites for today
-
-**Week Tab:**
-- Bar chart: Last 7 days (Mon → Sun)
-- Shows minutes per day
-- Top 10 sites for past 7 days
-
-**Month Tab:**
-- Bar chart: Last 30 days
-- Shows minutes per day
-- Top 10 sites for past 30 days
-
-## Manifest V3 Compliance
-
-✅ **Service Worker:** Uses background.js as service worker (not background page)
-✅ **No Eval:** No dynamic code execution
-✅ **Minimal Permissions:** Only `tabs` and `storage.local` for preferences
-✅ **Keepalive:** Implements port connection to prevent service worker sleep
-✅ **Timer Management:** Uses setInterval with proper cleanup
-
-## Privacy & Security
-
-🔒 **Privacy-First Design:**
-- No data sent to external servers
-- No persistent storage (resets on close)
-- No tracking across browser sessions
-- No personal information collected
-
-🔒 **Security Features:**
-- Ignores chrome:// and chrome-extension:// URLs
-- Safe error handling for all operations
-- No external dependencies (Chart.js is local)
-- Content Security Policy compliant
-
-## Customization
-
-### Change Update Interval
-
-In `background.js`, modify:
-```javascript
-const UPDATE_INTERVAL = 1000; // Change to 5000 for 5 seconds
-```
-
-### Change Chart Colors
-
-In `popup.js`, modify chart creation:
-```javascript
-backgroundColor: 'rgba(102, 126, 234, 0.8)', // Change color here
-borderColor: 'rgba(102, 126, 234, 1)',       // And here
-```
-
-### Change UI Theme
-
-In `popup.css`, modify header gradient:
-```css
-background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-```
-
-## Troubleshooting
-
-### Extension Not Tracking
-
-1. Check if icon is present in toolbar
-2. Open popup - verify "Track Audio Tabs" is enabled
-3. Open Chrome DevTools → Background page → Check console for errors
-4. Reload extension: chrome://extensions/ → Reload button
-
-### Charts Not Showing
-
-1. Verify chart.min.js is in extension folder
-2. Check browser console for errors (F12)
-3. Try clearing session data and tracking again
-
-### Service Worker Stopped
-
-This is normal for MV3. The extension automatically restarts tracking when needed.
-
-## Testing Checklist
-
-- [ ] Active tab tracking works when window is focused
-- [ ] Active tab tracking stops when window is unfocused
-- [ ] Audio tab tracking works (play YouTube video in background)
-- [ ] Audio tab tracking stops when audio is muted
-- [ ] Multiple audio tabs are tracked simultaneously
-- [ ] Time updates in real-time (every 2 seconds in UI)
-- [ ] Today tab shows correct total time
-- [ ] Week chart displays 7 days correctly
-- [ ] Month chart displays 30 days correctly
-- [ ] Top sites list shows correct rankings
-- [ ] Toggle for audio tracking works
-- [ ] Clear session data button works
-- [ ] Extension icon shows in toolbar
-- [ ] Data persists when popup is closed/reopened
-- [ ] Data resets when Chrome is restarted
-
-## Technical Specifications
-
-**Chrome Version:** 88+ (Manifest V3 support)
-**Permissions:** tabs, storage
-**Storage:** In-memory only (session-based)
-**Chart Library:** Chart.js v4.4.0 (local)
-**Update Frequency:** 1 second (configurable)
-**UI Update:** 2 seconds
-**Icons:** 16x16, 48x48, 128x128 PNG
-
-## Code Explanation
-
-### Edge Cases Handled
-
-1. **Muted Tabs:**
-   - Only tracks tabs with `audible: true`
-   - Muted tabs are ignored even if playing media
-
-2. **Multiple Audio Tabs:**
-   - Uses `Set()` to track multiple tab IDs
-   - Each tab tracked independently
-   - No double-counting
-
-3. **Service Worker Sleep (MV3):**
-   - Uses keepalive port connection
-   - Timer restarts automatically
-   - In-memory data survives sleep
-
-4. **Tab Lifecycle:**
-   - onActivated: Tracks tab switches
-   - onUpdated: Tracks audio state changes
-   - onRemoved: Cleanup when tab closes
-
-5. **Window Focus:**
-   - onFocusChanged: Tracks window focus/unfocus
-   - Stops all active tab tracking when unfocused
-   - Audio tabs continue tracking (if enabled)
-
-### Time Conversion
-
-```javascript
-// Milliseconds to minutes/hours
-const ms = 123456;
-const seconds = Math.floor(ms / 1000);
-const minutes = Math.floor(seconds / 60);
-const hours = Math.floor(minutes / 60);
-
-// Format: "2h 15m" or "45m"
-```
-
-## License
-
-MIT License - Free to use, modify, and distribute
-
-## Support
-
-For issues or questions, check the code comments in each file for detailed explanations.
+* Timer runs every 1 second
+* Calculates elapsed time since last update
+* Adds time to active + audio tabs
+* Updates in-memory storage only
 
 ---
 
-**Built with modern Chrome Extension best practices (Manifest V3)**
-# TabTamer
+## Analytics Calculations
+
+**Today Tab:** total time for current date, top 10 sites
+**Week Tab:** bar chart last 7 days (Mon → Sun), top 10 sites
+**Month Tab:** bar chart last 30 days, top 10 sites
+
+---
+
+## Settings Page
+
+* Site usage graphs (Today/Week/Month)
+* Daily time limits per domain → warn at 5 & 2 minutes remaining
+* Redirect to `blocked.html` when limit exceeded
+* View/remove element block rules
+* Backup & restore all settings
+
+---
+
+## Manifest V3 Compliance
+
+✅ Service Worker (`background.js`) used instead of background page
+✅ No `eval` or dynamic code execution
+✅ Minimal permissions: tabs, storage, notifications, alarms, scripting
+✅ Implements keep-alive via port connection
+✅ Proper timer cleanup
+
+---
+
+## Privacy & Security
+
+🔒 Privacy-first: No external data sent, time tracking persists, picker blocks reset, no personal info
+🔒 Security: Ignores chrome:// URLs, safe error handling, CSP-compliant, no external dependencies
+
+---
+
+## Troubleshooting
+
+* Element blocker not working → check console, reload, click ⛶
+* Extension not tracking → verify toolbar icon, “Track Audio Tabs” enabled
+* Charts not showing → verify `chart.min.js`, clear session data
+
+---
+
+## Testing Checklist
+
+* Active & audio tab tracking works
+* Element picker highlights correctly
+* Clicking element shows confirmation box
+* Blocked elements stay hidden if saved
+* Dark mode toggle works
+* Today/Week/Month analytics correct
+
+---
+
+## License
+
+MIT License – free to use, modify, and distribute

@@ -70,3 +70,21 @@ button:hover {
   margin-top: 8px;
   font-weight: 600;
 }
+
+body.dark {
+  background: #121212;
+  color: #ffffff;
+}
+
+body.dark .card {
+  background: #1e1e1e;
+  color: #ffffff;
+}
+
+body.dark input,
+body.dark select,
+body.dark textarea {
+  background: #1e1e1e;
+  color: #e0e0e0;
+  border: 1px solid #333;
+}

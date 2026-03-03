@@ -1,100 +1,141 @@
-# Quick Start Guide
+# Quick Start Guide – TabTamer Chrome Extension
 
 ## Load Extension in 3 Steps
 
 ### 1. Open Chrome Extensions Page
-- Navigate to `chrome://extensions/`
-- Or click the puzzle icon → Manage Extensions
+
+* Navigate to `chrome://extensions/`
+* Or click the puzzle icon → **Manage Extensions**
 
 ### 2. Enable Developer Mode
-- Toggle **Developer mode** switch in top-right corner
+
+* Toggle **Developer mode** switch in the top-right corner
 
 ### 3. Load Extension
-- Click **Load unpacked** button
-- Select the `extension/` folder
-- Done! Extension icon appears in toolbar
+
+* Click **Load unpacked**
+* Select the `extension/` folder
+* ✅ Done! Extension icon appears in the toolbar
+
+---
 
 ## Test It Out
 
-### Basic Test (1 minute)
-1. Click extension icon to open popup
-2. Browse to any website (e.g., google.com)
-3. Wait 10 seconds
-4. Click extension icon again
-5. See time tracked under "Today" tab
+### Basic Time Tracking Test (~1 min)
 
-### Audio Tracking Test (2 minutes)
+1. Click the extension icon to open the popup
+2. Browse to any website (e.g., `google.com`)
+3. Wait 10 seconds
+4. Click the extension icon again
+5. ✅ Time tracked appears under the **Today** tab
+
+### Element Blocker Test (~2 min)
+
+1. Click the ⛶ button in the popup
+2. Popup closes automatically
+3. Hover over any element on the webpage
+4. ✅ Element highlights with a gray dotted outline
+5. Click an element to temporarily hide it
+6. ✅ Confirmation box appears in the top-right corner
+7. Click **Block** to permanently hide the element
+8. Reload the page – blocked element stays hidden
+
+### Audio Tracking Test (~2 min)
+
 1. Open YouTube in a new tab
 2. Play any video
-3. Switch to a different tab (keep YouTube tab open)
+3. Switch to a different tab (leave YouTube tab open)
 4. Wait 30 seconds
-5. Check extension - YouTube should be tracked!
+5. ✅ Extension tracks YouTube even in background
 
 ### Analytics Test
+
 1. Browse multiple websites for a few minutes
-2. Open extension popup
-3. Click "Week" tab - see bar chart
-4. Click "Month" tab - see 30-day chart
-5. Scroll down to see top sites list
+2. Open the extension popup
+3. Click **Week** tab → see weekly bar chart
+4. Click **Month** tab → see 30-day chart
+5. Scroll down → see top sites list
+
+---
 
 ## Features to Try
 
-- ✅ **Toggle Audio Tracking**: Turn off to stop tracking background audio
-- ✅ **Clear Session**: Reset all data (test the fresh start)
-- ✅ **Multiple Audio Tabs**: Play audio in 2+ tabs, all tracked
-- ✅ **Window Focus**: Minimize Chrome, tracking stops for active tab
-- ✅ **Real-time Updates**: Popup refreshes every 2 seconds
+* ✅ **Element Blocker**: Click ⛶ → hover → click to block
+* ✅ **Toggle Audio Tracking**: Stop tracking background tabs
+* ✅ **Dark Mode**: Toggle with ☀ / ⏾ button
+* ✅ **Clear Session**: Reset session time tracking data
+* ✅ **Multiple Audio Tabs**: Tracks all audio tabs simultaneously
+* ✅ **Window Focus Awareness**: Pauses active tab tracking when minimized
+
+---
 
 ## Troubleshooting
 
-**Extension not loading?**
-- Make sure all files are in the extension/ folder
-- Check Developer mode is enabled
-- Look for error messages in chrome://extensions/
+### Element Blocker Not Working?
 
-**No data showing?**
-- Browse a normal website (not chrome:// pages)
-- Keep browser window focused
-- Wait at least 10 seconds
+* Ensure you are on a regular website (not `chrome://` or `edge://`)
+* Verify `contentScript.js` is loaded (F12 → Console)
+* Reload page and click ⛶ again
+* Extension cannot block elements on browser internal pages
 
-**Service worker inactive?**
-- This is normal for Manifest V3
-- Extension auto-restarts when needed
-- Your data is safe in memory
+### Extension Not Tracking?
+
+* Check toolbar icon presence
+* Open popup → ensure **Track Audio Tabs** is enabled
+* Open Chrome DevTools → **Background page** → check console logs
+* Reload extension: `chrome://extensions/` → **Reload** button
+
+### Confirmation Box Not Appearing?
+
+* Popup closes automatically – confirmation appears on webpage
+* Look in top-right corner
+* If missing, check DevTools console for errors
+
+---
 
 ## Debug Console
 
 To see background logs:
+
 1. Go to `chrome://extensions/`
-2. Find "Session ( Time Tracker )"
-3. Click "service worker" link
-4. DevTools opens with console logs
-
-## What Gets Tracked?
-
-✅ **Tracked:**
-- Active tab when window is focused
-- Any tab playing audio (if enabled)
-- Regular websites (http/https)
-
-❌ **Not Tracked:**
-- Chrome internal pages (chrome://)
-- Extension pages
-- New Tab page
-- Browser when minimized/unfocused
-- Muted tabs (even if playing media)
-
-## Session Data
-
-**Persists:**
-- While Chrome is running
-- Across tab closes
-- Across extension reloads
-
-**Resets:**
-- When Chrome fully closes
-- When clicking "Clear Session Data"
+2. Find **TabTamer**
+3. Click **service worker** link
+4. DevTools opens → view console logs
 
 ---
 
-Enjoy tracking your browsing time!
+## What Gets Tracked?
+
+**✅ Tracked:**
+
+* Active tab (window focused)
+* Any tab playing audio (if enabled)
+* Regular websites (http/https)
+* Saved element block rules
+
+**❌ Not Tracked:**
+
+* Chrome internal pages (`chrome://`)
+* Extension pages
+* New Tab page
+* Minimized or unfocused browser
+* Muted tabs (even if media playing)
+
+---
+
+## Session Data
+
+**Persists Across Sessions:**
+
+* Element block rules (manually saved)
+* Site time limits
+* Dark mode preference
+
+**Resets:**
+
+* Time tracking data when Chrome closes
+* Time tracking data when clicking **Clear Session Data**
+
+---
+
+✅ Enjoy tracking and taming your browsing experience with TabTamer!

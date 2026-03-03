@@ -1,6 +1,20 @@
 // Session-based time tracking for Chrome extension (Manifest V3)
-// All data is stored in-memory and resets when Chrome closes
 
+// Clear any existing listeners on startup
+if (chrome.runtime.onMessage.hasListeners()) {
+  // Force remove all listeners (though we can't directly)
+  console.log("Cleaning up old message listeners...");
+}
+
+// Add this helper function near the top of background.js
+function isValidHttpUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 // Persistent local storage
 function persistSites() {
   chrome.storage.local.set({
@@ -84,6 +98,82 @@ function cleanupOldWarnings() {
   });
 }
 
+// Save element selector in background.js
+let pendingElementBlock = null;
+
+chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+  try {
+    if (req.action === "ELEMENT_BLOCK_PREVIEW") {
+      if (!sender.tab) {
+        console.error("No sender tab for element block preview");
+        return;
+      }
+
+      // Check if the tab URL is valid
+      if (!sender.tab.url || !isValidHttpUrl(sender.tab.url)) {
+        console.log("Cannot block elements on this page type");
+        return;
+      }
+
+      pendingElementBlock = {
+        selector: req.selector,
+        tabId: sender.tab.id,
+        domain: new URL(sender.tab.url).hostname.replace(/^www\./, "")
+      };
+
+      // Send confirmation request to the content script (shows UI on webpage)
+      chrome.tabs.sendMessage(sender.tab.id, {
+        action: "SHOW_BLOCK_CONFIRMATION",
+        selector: req.selector,
+        domain: pendingElementBlock.domain
+      }).catch(error => {
+        console.debug("Failed to show confirmation (content script may not be ready):", error.message);
+      });
+
+      return true;
+    }
+
+    else if (req.action === "CONFIRM_ELEMENT_BLOCK") {
+      if (!pendingElementBlock) {
+        console.warn("No pending element block to confirm");
+        return;
+      }
+
+      // Save the element block rule
+      chrome.storage.local.get(["elementBlockRules"], ({ elementBlockRules = {} }) => {
+        if (pendingElementBlock && pendingElementBlock.domain) {
+          elementBlockRules[pendingElementBlock.domain] ||= [];
+          elementBlockRules[pendingElementBlock.domain].push(pendingElementBlock.selector);
+          chrome.storage.local.set({ elementBlockRules });
+
+          console.log(`Element blocked on ${pendingElementBlock.domain}`);
+        }
+      });
+
+      pendingElementBlock = null;
+      return true;
+    }
+
+    else if (req.action === "CANCEL_ELEMENT_BLOCK") {
+      if (!pendingElementBlock) {
+        console.warn("No pending element block to cancel");
+        return;
+      }
+
+      // Send undo message to content script
+      if (pendingElementBlock.tabId) {
+        chrome.tabs.sendMessage(pendingElementBlock.tabId, {
+          action: "UNDO_ELEMENT_BLOCK"
+        }).catch(() => { });
+      }
+
+      pendingElementBlock = null;
+      return true;
+    }
+  } catch (error) {
+    console.error("Error in message handler:", error);
+  }
+});
 
 // Update time for active tabs
 function updateTime() {
@@ -131,46 +221,45 @@ function updateTime() {
           const limitMinutes = siteLimits[domain];
           if (!limitMinutes) return;
 
-          // const usedMinutes = minutes(site.dailyTime[dateKey]);
-          // const remaining = limitMinutes - usedMinutes;
           const limitMs = limitMinutes * 60000;
           const usedMs = site.dailyTime[dateKey];
           const remainingMs = limitMs - usedMs;
           const remainingMinutes = Math.ceil(remainingMs / 60000);
 
-          const warningKey = getWarningKey(domain);
+          // 🔹 unique key per minute-warning
+          const warningKey = `${domain}_${getDateKey()}_${remainingMinutes}`;
+
           if (
-            (remainingMinutes === 5 || remainingMinutes <= 2) && remainingMinutes > 0 &&
+            (remainingMinutes <= 5 && remainingMinutes > 4 || remainingMinutes <= 2 && remainingMinutes > 1) &&
             !limitWarningsSent[warningKey]
           ) {
-            // System notification
+            // OS notification
             chrome.notifications.create(
               `limit-${domain}-${Date.now()}`,
               {
                 type: 'basic',
-                iconUrl: 'icon128.png',
+                iconUrl: 'icon48.png',
                 title: 'TabTamer – Time Limit Warning',
                 message: `${domain}\n${remainingMinutes} minute(s) remaining`
               }
             );
 
-            // In-page browser-style toast
+            // In-page toast (active tab only)
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
               if (tabs[0]) {
                 chrome.tabs.sendMessage(tabs[0].id, {
                   action: 'showToast',
-                  message: `${domain}: 2 minutes remaining!`
-                }).catch(() => {
-                  // Tab may not be injectable (chrome:// pages etc.)
-                });
+                  message: `${domain}: ${remainingMinutes} minute(s) remaining`
+                }).catch(() => { });
               }
             });
+
             limitWarningsSent[warningKey] = true;
             chrome.storage.local.set({ limitWarningsSent });
           }
-
         }
       );
+
 
       // -------- LIMIT ENFORCEMENT --------
       chrome.storage.local.get(['siteLimits'], ({ siteLimits = {} }) => {
@@ -187,7 +276,7 @@ function updateTime() {
 
             chrome.tabs.update(tabId, {
               url: chrome.runtime.getURL(
-                `blocked.html?domain=${encodeURIComponent(domain)}`
+                `pages/blocked.html?domain=${encodeURIComponent(domain)}`
               )
             });
 
@@ -195,7 +284,7 @@ function updateTime() {
               `limit-exceeded-${tabId}-${Date.now()}`,
               {
                 type: 'basic',
-                iconUrl: 'icon128.png',
+                iconUrl: 'icon48.png',
                 title: 'TabTamer – Limit Reached',
                 message: `${domain} has reached your daily time limit.`
               }
@@ -226,7 +315,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     resetBlockedTabs();
   }
 });
-
 
 // Handle tab activation
 chrome.tabs.onActivated.addListener(async (activeInfo) => {

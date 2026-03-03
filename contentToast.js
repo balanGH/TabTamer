@@ -22,6 +22,6 @@ chrome.runtime.onMessage.addListener(msg => {
         setTimeout(() => {
             div.style.opacity = 0;
             setTimeout(() => div.remove(), 300);
-        }, 5000);
+        }, 10000);
     }
 });

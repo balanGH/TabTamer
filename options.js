@@ -1,6 +1,15 @@
 const chartCtx = document.getElementById("usageChart").getContext("2d");
 let chart;
 
+// Dark Mode get from storage
+document.addEventListener('DOMContentLoaded', () => {
+  chrome.storage.local.get('preferences', ({ preferences }) => {
+    if (preferences && preferences.darkMode === true) {
+      document.body.classList.add('dark');
+    }
+  });
+});
+
 // Helper function to get the date key (YYYY-MM-DD format)
 function getDateKey(daysAgo = 0) {
   const d = new Date();
