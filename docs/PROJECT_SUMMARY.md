@@ -47,7 +47,7 @@ A production-ready Chrome extension (Manifest V3) that tracks website usage time
 <details>
 
 ```
-TabTamer/
+extension/
 ├── manifest.json         # Extension configuration (MV3)
 ├── background.js         # Service worker with time tracking & element blocking logic
 ├── popup.html            # Extension popup UI

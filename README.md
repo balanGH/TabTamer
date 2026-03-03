@@ -46,29 +46,37 @@ A production-ready Chrome extension (Manifest V3) that tracks website usage time
 
 ```
 TabTamer/
-├── README.md                    # Project overview & documentation
-├── PROJECT_SUMMARY.md           # High-level architecture & features
-├── QUICK_START.md               # Installation & quick usage guide
-├── TESTING_GUIDE.md             # Manual testing checklist
-├── manifest.json                # Extension configuration (Manifest V3)
-├── background.js                # Service worker: time tracking & limit enforcement
-├── popup.html                   # Extension popup UI
-├── popup.js                     # Popup logic & chart rendering
-├── popup.css                    # Popup styling
-├── options.html                 # Settings page UI
-├── options.js                   # Settings logic (limits, rules, toggles)
-├── options.css                  # Settings styling
-├── blocked.html                 # Page shown when time limit is reached
-├── blocked.js                   # Blocked page logic
-├── contentScript.js             # Element picker & confirmation UI
-├── contentBlocker.js            # Auto-hides blocked elements
-├── contentToast.js              # In-page toast notifications
-├── chart.min.js                 # Local Chart.js library (no CDN dependency)
-├── icon16.png                   # Extension icon (16x16)
-├── icon48.png                   # Extension icon (48x48)
-├── icon128.png                  # Extension icon (128x128)
-├── generate_icons.py            # Python script for generating icons
-└── create-icons.html            # Icon creation/testing page
+├── README.md
+├── manifest.json                  # Extension configuration (MV3)
+├── generate_icons.py               # Python script for generating icons
+├── create-icons.html               # Icon creation/testing page
+├── assets/
+│   ├── chart.min.js                # Local Chart.js library
+│   └── icons/
+│       ├── icon16.png              # Extension icon (16x16)
+│       ├── icon48.png              # Extension icon (48x48)
+│       └── icon128.png             # Extension icon (128x128)
+├── docs/
+│   ├── PROJECT_SUMMARY.md
+│   ├── QUICK_START.md
+│   └── TESTING_GUIDE.md
+├── pages/
+│   ├── blocked.html                # Time limit reached page
+│   └── blocked.js                  # Blocked page logic
+└── src/
+    ├── background.js               # Service worker: time tracking & blocking
+    ├── content/
+    │   ├── contentScript.js        # Element picker & confirmation UI
+    │   ├── contentBlocker.js       # Auto-hides blocked elements
+    │   └── contentToast.js         # Toast notifications
+    ├── options/
+    │   ├── options.html            # Settings page
+    │   ├── options.js              # Settings logic
+    │   └── options.css             # Settings styling
+    └── popup/
+        ├── popup.html              # Popup UI
+        ├── popup.js                # UI logic & chart rendering
+        └── popup.css               # Popup styling
 ```
 
 ---

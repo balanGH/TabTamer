@@ -238,7 +238,7 @@ function updateTime() {
               `limit-${domain}-${Date.now()}`,
               {
                 type: 'basic',
-                iconUrl: 'icon48.png',
+                iconUrl: chrome.runtime.getURL('assets/icons/icon48.png'),
                 title: 'TabTamer – Time Limit Warning',
                 message: `${domain}\n${remainingMinutes} minute(s) remaining`
               }
@@ -284,7 +284,7 @@ function updateTime() {
               `limit-exceeded-${tabId}-${Date.now()}`,
               {
                 type: 'basic',
-                iconUrl: 'icon48.png',
+                iconUrl: chrome.runtime.getURL('assets/icons/icon48.png'),
                 title: 'TabTamer – Limit Reached',
                 message: `${domain} has reached your daily time limit.`
               }

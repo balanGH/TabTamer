@@ -486,18 +486,6 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   }
 });
 
-// Keep connection alive with background service worker
-const port = chrome.runtime.connect({ name: 'keepAlive' });
-port.onDisconnect.addListener(() => {
-  // Will reconnect automatically if needed
-});
-
-// Load data on popup open
-loadData();
-
-// Refresh data every 2 seconds
-setInterval(loadData, 1000);
-
 // Wrap all storage operations with error handling
 async function safeStorageOperation(operation) {
   try {
@@ -540,3 +528,15 @@ document.getElementById('darkModeToggle').addEventListener('click', () => {
       preferences.darkMode ? '☀' : '⏾';
   });
 });
+
+// Keep connection alive with background service worker
+const port = chrome.runtime.connect({ name: 'keepAlive' });
+port.onDisconnect.addListener(() => {
+  // Will reconnect automatically if needed
+});
+
+// Load data on popup open
+loadData();
+
+// Refresh data every x seconds
+setInterval(loadData, 1000);
