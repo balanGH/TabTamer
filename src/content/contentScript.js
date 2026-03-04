@@ -286,6 +286,21 @@ if (window.tabTamerInitialized) {
         else if (msg.action === "UPDATE_CONFIRMATION") {
             updateConfirmationUI(msg.selectors, msg.count);
         }
+        else if (msg.action === "UNDO_SPECIFIC_ELEMENT") {
+            // Restore a specific element by selector
+            const selector = msg.selector;
+            const elementIndex = window.tabTamer.hiddenElements.findIndex(item => item.selector === selector);
+
+            if (elementIndex !== -1) {
+                const item = window.tabTamer.hiddenElements[elementIndex];
+                if (item.element && item.element.parentNode) {
+                    item.element.style.display = item.originalDisplay || "";
+                }
+                window.tabTamer.hiddenElements.splice(elementIndex, 1);
+                window.tabTamer.selectionCount = window.tabTamer.hiddenElements.length;
+                console.log(`Restored element: ${selector}`);
+            }
+        }
     });
 
     // Show selection counter
@@ -437,14 +452,46 @@ if (window.tabTamerInitialized) {
             // Handle checkbox changes
             document.querySelectorAll('.tabtamer-selector-checkbox').forEach(checkbox => {
                 checkbox.addEventListener('change', (e) => {
+                    e.preventDefault();
                     e.stopPropagation();
 
-                    // Update count
-                    const checkedCount = document.querySelectorAll('.tabtamer-selector-checkbox:checked').length;
-                    overlay.querySelector('.tabtamer-badge').textContent = checkedCount;
+                    const selector = e.target.dataset.selector;
+                    const isChecked = e.target.checked;
 
-                    const blockBtn = document.getElementById('tabtamerConfirmBlock');
-                    blockBtn.textContent = `Block Selected (${checkedCount})`;
+                    if (!isChecked) {
+                        // Immediately restore the element visually
+                        const hiddenElements = window.tabTamer.hiddenElements;
+                        const elementIndex = hiddenElements.findIndex(item => item.selector === selector);
+
+                        if (elementIndex !== -1) {
+                            const item = hiddenElements[elementIndex];
+                            if (item.element && item.element.parentNode) {
+                                item.element.style.display = item.originalDisplay || "";
+                            }
+                            // Remove from hiddenElements array
+                            hiddenElements.splice(elementIndex, 1);
+                        }
+
+                        // Send message to background to remove from stack
+                        chrome.runtime.sendMessage({
+                            action: "REMOVE_FROM_STACK",
+                            selector: selector
+                        }).catch(error => {
+                            console.error("Failed to send remove from stack:", error);
+                        });
+                    }
+
+                    // Update count in UI
+                    setTimeout(() => {
+                        const checkedCount = document.querySelectorAll('.tabtamer-selector-checkbox:checked').length;
+                        const badge = overlay.querySelector('.tabtamer-badge');
+                        if (badge) badge.textContent = checkedCount;
+
+                        const blockBtn = document.getElementById('tabtamerConfirmBlock');
+                        if (blockBtn) {
+                            blockBtn.textContent = `Block Selected (${checkedCount})`;
+                        }
+                    }, 50);
                 });
             });
 

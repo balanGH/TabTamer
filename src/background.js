@@ -127,15 +127,19 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
         currentBlockDomain = domain;
       }
 
-      // Add the new selector to the stack
-      pendingElementBlocks.push({
-        selector: req.selector,
-        tabId: sender.tab.id,
-        domain: domain,
-        timestamp: Date.now()
-      });
-
-      console.log(`Element added to stack. Total: ${pendingElementBlocks.length}`);
+      // Add the new selector to the stack (avoid duplicates)
+      const exists = pendingElementBlocks.some(item => item.selector === req.selector);
+      if (!exists) {
+        pendingElementBlocks.push({
+          selector: req.selector,
+          tabId: sender.tab.id,
+          domain: domain,
+          timestamp: Date.now()
+        });
+        console.log(`Element added to stack. Total: ${pendingElementBlocks.length}`);
+      } else {
+        console.log(`Element already in stack: ${req.selector}`);
+      }
       return true;
     }
 
@@ -220,33 +224,45 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
 
     // Handle remove from stack (when user unchecks in confirmation)
     else if (req.action === "REMOVE_FROM_STACK") {
-      if (req.selector && pendingElementBlocks.length > 0) {
-        const index = pendingElementBlocks.findIndex(item => item.selector === req.selector);
-        if (index !== -1) {
-          // Get the element before removing
-          const removedItem = pendingElementBlocks[index];
+      if (!req.selector) {
+        console.warn("No selector provided for REMOVE_FROM_STACK");
+        return;
+      }
 
-          // Remove from stack
-          pendingElementBlocks.splice(index, 1);
-          console.log(`Removed from stack. Remaining: ${pendingElementBlocks.length}`);
+      if (pendingElementBlocks.length === 0) {
+        console.warn("No pending elements to remove from");
+        return;
+      }
 
-          // Send message to content script to restore this specific element
-          if (currentBlockTabId) {
-            chrome.tabs.sendMessage(currentBlockTabId, {
-              action: "UNDO_SPECIFIC_ELEMENT",
-              selector: req.selector
-            }).catch(() => { });
-          }
+      // Find and remove the selector from stack
+      const initialLength = pendingElementBlocks.length;
+      pendingElementBlocks = pendingElementBlocks.filter(item => item.selector !== req.selector);
 
-          // Update the confirmation UI
-          if (currentBlockTabId) {
-            chrome.tabs.sendMessage(currentBlockTabId, {
-              action: "UPDATE_CONFIRMATION",
-              selectors: pendingElementBlocks.map(item => item.selector),
-              count: pendingElementBlocks.length
-            }).catch(() => { });
-          }
+      if (pendingElementBlocks.length < initialLength) {
+        console.log(`Removed from stack. Remaining: ${pendingElementBlocks.length}`);
+
+        // Send message to content script to restore this specific element visually
+        if (currentBlockTabId) {
+          chrome.tabs.sendMessage(currentBlockTabId, {
+            action: "UNDO_SPECIFIC_ELEMENT",
+            selector: req.selector
+          }).catch(error => {
+            console.debug("Failed to restore element:", error.message);
+          });
         }
+
+        // Update the confirmation UI with new count
+        if (currentBlockTabId) {
+          chrome.tabs.sendMessage(currentBlockTabId, {
+            action: "UPDATE_CONFIRMATION",
+            selectors: pendingElementBlocks.map(item => item.selector),
+            count: pendingElementBlocks.length
+          }).catch(error => {
+            console.debug("Failed to update confirmation UI:", error.message);
+          });
+        }
+      } else {
+        console.log(`Selector not found in stack: ${req.selector}`);
       }
       return true;
     }
