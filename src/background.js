@@ -98,12 +98,15 @@ function cleanupOldWarnings() {
   });
 }
 
-// Save element selector in background.js
-let pendingElementBlock = null;
+// Save element selector in background.js - Updated for multiple elements
+let pendingElementBlocks = []; // Array to store multiple elements
+let currentBlockTabId = null;
+let currentBlockDomain = null;
 
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   try {
-    if (req.action === "ELEMENT_BLOCK_PREVIEW") {
+    // Handle element added to stack (no confirmation yet)
+    if (req.action === "ELEMENT_ADDED_TO_STACK") {
       if (!sender.tab) {
         console.error("No sender tab for element block preview");
         return;
@@ -115,59 +118,136 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
         return;
       }
 
-      pendingElementBlock = {
+      const domain = new URL(sender.tab.url).hostname.replace(/^www\./, "");
+
+      // If this is a new tab/domain, reset the stack
+      if (currentBlockTabId !== sender.tab.id || currentBlockDomain !== domain) {
+        pendingElementBlocks = [];
+        currentBlockTabId = sender.tab.id;
+        currentBlockDomain = domain;
+      }
+
+      // Add the new selector to the stack
+      pendingElementBlocks.push({
         selector: req.selector,
         tabId: sender.tab.id,
-        domain: new URL(sender.tab.url).hostname.replace(/^www\./, "")
-      };
+        domain: domain,
+        timestamp: Date.now()
+      });
 
-      // Send confirmation request to the content script (shows UI on webpage)
+      console.log(`Element added to stack. Total: ${pendingElementBlocks.length}`);
+      return true;
+    }
+
+    // Handle finish selection - show confirmation
+    else if (req.action === "SHOW_BLOCK_CONFIRMATION_FROM_FINISH") {
+      if (!sender.tab) {
+        console.error("No sender tab for element block confirmation");
+        return;
+      }
+
+      // Send confirmation with all selected elements
       chrome.tabs.sendMessage(sender.tab.id, {
         action: "SHOW_BLOCK_CONFIRMATION",
-        selector: req.selector,
-        domain: pendingElementBlock.domain
+        selectors: pendingElementBlocks.map(item => item.selector),
+        domain: req.domain || currentBlockDomain,
+        count: pendingElementBlocks.length
       }).catch(error => {
-        console.debug("Failed to show confirmation (content script may not be ready):", error.message);
+        console.debug("Failed to show confirmation:", error.message);
       });
 
       return true;
     }
 
+    // Handle confirm block
     else if (req.action === "CONFIRM_ELEMENT_BLOCK") {
-      if (!pendingElementBlock) {
-        console.warn("No pending element block to confirm");
+      if (pendingElementBlocks.length === 0) {
+        console.warn("No pending elements to confirm");
         return;
       }
 
-      // Save the element block rule
+      // Save all element block rules
       chrome.storage.local.get(["elementBlockRules"], ({ elementBlockRules = {} }) => {
-        if (pendingElementBlock && pendingElementBlock.domain) {
-          elementBlockRules[pendingElementBlock.domain] ||= [];
-          elementBlockRules[pendingElementBlock.domain].push(pendingElementBlock.selector);
-          chrome.storage.local.set({ elementBlockRules });
+        if (currentBlockDomain) {
+          elementBlockRules[currentBlockDomain] ||= [];
 
-          console.log(`Element blocked on ${pendingElementBlock.domain}`);
+          // Add all new selectors (avoid duplicates)
+          pendingElementBlocks.forEach(item => {
+            if (!elementBlockRules[currentBlockDomain].includes(item.selector)) {
+              elementBlockRules[currentBlockDomain].push(item.selector);
+            }
+          });
+
+          chrome.storage.local.set({ elementBlockRules }, () => {
+            console.log(`${pendingElementBlocks.length} elements blocked on ${currentBlockDomain}`);
+
+            // Show success notification
+            showNotification(`block-success-${Date.now()}`, {
+              type: 'basic',
+              iconUrl: chrome.runtime.getURL('assets/icons/icon128.png'),
+              title: 'TabTamer – Elements Blocked',
+              message: `${pendingElementBlocks.length} element(s) blocked on ${currentBlockDomain}`
+            });
+          });
         }
       });
 
-      pendingElementBlock = null;
+      // Clear the stack
+      pendingElementBlocks = [];
+      currentBlockTabId = null;
+      currentBlockDomain = null;
       return true;
     }
 
+    // Handle cancel block
     else if (req.action === "CANCEL_ELEMENT_BLOCK") {
-      if (!pendingElementBlock) {
-        console.warn("No pending element block to cancel");
-        return;
-      }
-
-      // Send undo message to content script
-      if (pendingElementBlock.tabId) {
-        chrome.tabs.sendMessage(pendingElementBlock.tabId, {
-          action: "UNDO_ELEMENT_BLOCK"
+      // Send undo message for all hidden elements
+      if (currentBlockTabId && pendingElementBlocks.length > 0) {
+        chrome.tabs.sendMessage(currentBlockTabId, {
+          action: "UNDO_ALL_ELEMENTS",
+          selectors: pendingElementBlocks.map(item => item.selector)
         }).catch(() => { });
       }
 
-      pendingElementBlock = null;
+      console.log(`${pendingElementBlocks.length} element(s) cancelled`);
+
+      // Clear the stack
+      pendingElementBlocks = [];
+      currentBlockTabId = null;
+      currentBlockDomain = null;
+      return true;
+    }
+
+    // Handle remove from stack (when user unchecks in confirmation)
+    else if (req.action === "REMOVE_FROM_STACK") {
+      if (req.selector && pendingElementBlocks.length > 0) {
+        const index = pendingElementBlocks.findIndex(item => item.selector === req.selector);
+        if (index !== -1) {
+          // Get the element before removing
+          const removedItem = pendingElementBlocks[index];
+
+          // Remove from stack
+          pendingElementBlocks.splice(index, 1);
+          console.log(`Removed from stack. Remaining: ${pendingElementBlocks.length}`);
+
+          // Send message to content script to restore this specific element
+          if (currentBlockTabId) {
+            chrome.tabs.sendMessage(currentBlockTabId, {
+              action: "UNDO_SPECIFIC_ELEMENT",
+              selector: req.selector
+            }).catch(() => { });
+          }
+
+          // Update the confirmation UI
+          if (currentBlockTabId) {
+            chrome.tabs.sendMessage(currentBlockTabId, {
+              action: "UPDATE_CONFIRMATION",
+              selectors: pendingElementBlocks.map(item => item.selector),
+              count: pendingElementBlocks.length
+            }).catch(() => { });
+          }
+        }
+      }
       return true;
     }
   } catch (error) {

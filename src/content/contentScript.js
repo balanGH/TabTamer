@@ -1,10 +1,6 @@
 // contentScript.js
 
-console.log("Content script loaded");
-// Debug: Check if script is loaded
-console.log("📢 contentScript.js loaded at:", new Date().toISOString());
-console.log("Current URL:", window.location.href);
-console.log("Chrome runtime valid:", !!chrome.runtime);
+console.log("📢 TabTamer contentScript loaded");
 
 // Check if already initialized
 if (window.tabTamerInitialized) {
@@ -16,9 +12,10 @@ if (window.tabTamerInitialized) {
     window.tabTamer = window.tabTamer || {
         pickerActive: false,
         hoveredEl: null,
-        lastHiddenEl: null,
-        lastSelector: null,
-        pickerStartTime: null
+        hiddenElements: [], // Array to store multiple hidden elements
+        pickerStartTime: null,
+        currentDomain: null,
+        selectionCount: 0
     };
 
     const HOVER_CLASS = "tabtamer-hover";
@@ -35,6 +32,28 @@ if (window.tabTamerInitialized) {
             cursor: crosshair !important;
         }
         
+        .tabtamer-counter {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 999999;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            animation: slideIn 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .tabtamer-counter.dark {
+            background: #5a67d8;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
         .tabtamer-confirm-overlay {
             position: fixed;
             top: 20px;
@@ -45,9 +64,14 @@ if (window.tabTamerInitialized) {
             padding: 16px;
             z-index: 1000000;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 300px;
+            max-width: 350px;
             animation: slideIn 0.3s ease;
             border: 1px solid #e0e0e0;
+            pointer-events: auto !important;
+        }
+        
+        .tabtamer-confirm-overlay * {
+            pointer-events: auto !important;
         }
         
         .tabtamer-confirm-overlay.dark {
@@ -71,26 +95,63 @@ if (window.tabTamerInitialized) {
             font-weight: 600;
             margin-bottom: 10px;
             color: #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         .tabtamer-confirm-overlay.dark .tabtamer-confirm-title {
             color: #e0e0e0;
         }
         
-        .tabtamer-confirm-selector {
-            background: #f5f5f5;
-            padding: 8px;
-            border-radius: 6px;
-            font-family: monospace;
+        .tabtamer-badge {
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
             font-size: 12px;
-            word-break: break-all;
-            margin: 10px 0;
-            color: #333;
         }
         
-        .tabtamer-confirm-overlay.dark .tabtamer-confirm-selector {
-            background: #1e1e1e;
-            color: #8fbaff;
+        .tabtamer-selector-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 10px 0;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        
+        .tabtamer-confirm-overlay.dark .tabtamer-selector-list {
+            border-color: #444;
+        }
+        
+        .tabtamer-selector-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 11px;
+            font-family: monospace;
+            word-break: break-all;
+            cursor: default;
+        }
+        
+        .tabtamer-confirm-overlay.dark .tabtamer-selector-item {
+            border-bottom-color: #444;
+        }
+        
+        .tabtamer-selector-item:last-child {
+            border-bottom: none;
+        }
+        
+        .tabtamer-selector-item input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+            pointer-events: auto !important;
+        }
+        
+        .tabtamer-selector-text {
+            flex: 1;
+            cursor: default;
         }
         
         .tabtamer-confirm-buttons {
@@ -106,6 +167,7 @@ if (window.tabTamerInitialized) {
             border-radius: 6px;
             font-weight: 500;
             cursor: pointer;
+            pointer-events: auto !important;
             transition: all 0.2s;
         }
         
@@ -135,73 +197,305 @@ if (window.tabTamerInitialized) {
         .tabtamer-btn-cancel.dark:hover {
             background: #555;
         }
+        
+        .tabtamer-help-text {
+            font-size: 11px;
+            color: #888;
+            margin-top: 8px;
+            text-align: center;
+            cursor: default;
+        }
+        
+        .tabtamer-finish-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            padding: 12px 24px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            z-index: 999999;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            animation: slideIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 2px solid white;
+        }
+        
+        .tabtamer-finish-button.dark {
+            background: #5a67d8;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .tabtamer-finish-button:hover {
+            transform: scale(1.05);
+        }
+        
+        .tabtamer-finish-button .count {
+            background: white;
+            color: #667eea;
+            border-radius: 20px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 700;
+        }
         `;
         document.documentElement.appendChild(style);
     }
 
     // Listen for messages
     chrome.runtime.onMessage.addListener(msg => {
-        console.log("Content script received message:", msg.action);
-
         if (msg.action === "START_ELEMENT_PICKER") {
             console.log("Starting element picker...");
 
-            // Reset any existing picker state first
+            // Reset hidden elements array
+            window.tabTamer.hiddenElements = [];
+            window.tabTamer.selectionCount = 0;
+
+            // Remove any existing UI elements
+            removeUI();
+
             if (window.tabTamerPickerActive) {
-                console.log("Picker already active, resetting...");
                 forceStopPicker();
             }
 
-            // Small delay to ensure clean state
             setTimeout(() => {
                 startPicker();
-                console.log("Picker started function called");
+                showCounter();
+                showFinishButton();
             }, 50);
-        } else if (msg.action === "UNDO_ELEMENT_BLOCK") {
+        }
+        else if (msg.action === "UNDO_ELEMENT_BLOCK") {
             undoLast();
-        } else if (msg.action === "SHOW_BLOCK_CONFIRMATION") {
-            showBlockConfirmation(msg.selector, msg.domain);
+        }
+        else if (msg.action === "UNDO_ALL_ELEMENTS") {
+            undoAllElements(msg.selectors);
+        }
+        else if (msg.action === "SHOW_BLOCK_CONFIRMATION") {
+            // Remove counter and finish button
+            removeUI();
+            // Show confirmation
+            showBlockConfirmation(msg.selectors, msg.domain, msg.count);
+        }
+        else if (msg.action === "UPDATE_CONFIRMATION") {
+            updateConfirmationUI(msg.selectors, msg.count);
         }
     });
 
+    // Show selection counter
+    function showCounter() {
+        removeCounter();
+
+        chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+            const isDark = preferences.darkMode || false;
+
+            const counter = document.createElement('div');
+            counter.id = 'tabtamer-counter';
+            counter.className = `tabtamer-counter ${isDark ? 'dark' : ''}`;
+            counter.textContent = '✨ Select elements to block (0)';
+            document.body.appendChild(counter);
+        });
+    }
+
+    function updateCounter(count) {
+        const counter = document.getElementById('tabtamer-counter');
+        if (counter) {
+            counter.textContent = `✨ Selected: ${count} element${count !== 1 ? 's' : ''}`;
+        }
+    }
+
+    function removeCounter() {
+        const counter = document.getElementById('tabtamer-counter');
+        if (counter) counter.remove();
+    }
+
+    // Show finish button
+    function showFinishButton() {
+        removeFinishButton();
+
+        chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+            const isDark = preferences.darkMode || false;
+
+            const button = document.createElement('button');
+            button.id = 'tabtamer-finish-button';
+            button.className = `tabtamer-finish-button ${isDark ? 'dark' : ''}`;
+            button.innerHTML = '✅ Done Selecting <span class="count" id="finish-count">0</span>';
+
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                finishSelection();
+            });
+
+            document.body.appendChild(button);
+        });
+    }
+
+    function updateFinishButton(count) {
+        const button = document.getElementById('tabtamer-finish-button');
+        if (button) {
+            const countSpan = document.getElementById('finish-count');
+            if (countSpan) countSpan.textContent = count;
+
+            if (count === 0) {
+                button.innerHTML = '❌ Cancel <span class="count" id="finish-count">0</span>';
+            } else {
+                button.innerHTML = '✅ Block Selected <span class="count" id="finish-count">' + count + '</span>';
+            }
+        }
+    }
+
+    function removeFinishButton() {
+        const button = document.getElementById('tabtamer-finish-button');
+        if (button) button.remove();
+    }
+
+    function removeUI() {
+        removeCounter();
+        removeFinishButton();
+    }
+
+    // Finish selection - show confirmation
+    function finishSelection() {
+        if (window.tabTamer.hiddenElements.length === 0) {
+            // Nothing selected, just cancel
+            chrome.runtime.sendMessage({ action: "CANCEL_ELEMENT_BLOCK" });
+            removeUI();
+            stopPicker();
+            return;
+        }
+
+        // Stop picker
+        stopPicker();
+
+        // Remove UI elements
+        removeUI();
+
+        // Get all selectors
+        const selectors = window.tabTamer.hiddenElements.map(item => item.selector);
+        const domain = window.location.hostname.replace(/^www\./, '');
+
+        // Send to background for confirmation
+        chrome.runtime.sendMessage({
+            action: "SHOW_BLOCK_CONFIRMATION_FROM_FINISH",
+            selectors: selectors,
+            domain: domain,
+            count: selectors.length
+        });
+    }
+
     // Show confirmation UI on the webpage
-    function showBlockConfirmation(selector, domain) {
+    function showBlockConfirmation(selectors, domain, count) {
+        // Remove any existing overlay
+        const existingOverlay = document.getElementById('tabtamer-confirm-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+
         // Check if dark mode is enabled
         chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
             const isDark = preferences.darkMode || false;
 
             const overlay = document.createElement('div');
+            overlay.id = 'tabtamer-confirm-overlay';
             overlay.className = `tabtamer-confirm-overlay ${isDark ? 'dark' : ''}`;
+
+            // Create selector list HTML
+            const selectorItems = selectors.map((selector, index) => {
+                const truncated = selector.length > 40 ? selector.substring(0, 40) + '...' : selector;
+                return `
+                    <div class="tabtamer-selector-item">
+                        <input type="checkbox" class="tabtamer-selector-checkbox" data-selector="${selector}" data-index="${index}" checked>
+                        <span class="tabtamer-selector-text" title="${selector}">${truncated}</span>
+                    </div>
+                `;
+            }).join('');
+
             overlay.innerHTML = `
-                <div class="tabtamer-confirm-title">🔒 Block Element on ${domain}?</div>
-                <div class="tabtamer-confirm-selector">${selector}</div>
-                <div class="tabtamer-confirm-buttons">
-                    <button class="tabtamer-btn-block" id="tabtamerConfirmBlock">Block</button>
-                    <button class="tabtamer-btn-cancel ${isDark ? 'dark' : ''}" id="tabtamerConfirmCancel">Cancel</button>
+                <div class="tabtamer-confirm-title">
+                    <span>🔒 Block Elements on ${domain}</span>
+                    <span class="tabtamer-badge">${count}</span>
                 </div>
+                <div class="tabtamer-selector-list" id="tabtamer-selector-list">
+                    ${selectorItems}
+                </div>
+                <div class="tabtamer-confirm-buttons">
+                    <button class="tabtamer-btn-block" id="tabtamerConfirmBlock">Block Selected (${count})</button>
+                    <button class="tabtamer-btn-cancel ${isDark ? 'dark' : ''}" id="tabtamerConfirmCancel">Cancel All</button>
+                </div>
+                <div class="tabtamer-help-text">Uncheck any elements you don't want to block</div>
             `;
 
             document.body.appendChild(overlay);
 
-            // Handle buttons
-            document.getElementById('tabtamerConfirmBlock').addEventListener('click', () => {
-                chrome.runtime.sendMessage({ action: "CONFIRM_ELEMENT_BLOCK" });
+            // Handle checkbox changes
+            document.querySelectorAll('.tabtamer-selector-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    e.stopPropagation();
+
+                    // Update count
+                    const checkedCount = document.querySelectorAll('.tabtamer-selector-checkbox:checked').length;
+                    overlay.querySelector('.tabtamer-badge').textContent = checkedCount;
+
+                    const blockBtn = document.getElementById('tabtamerConfirmBlock');
+                    blockBtn.textContent = `Block Selected (${checkedCount})`;
+                });
+            });
+
+            // Handle block button
+            document.getElementById('tabtamerConfirmBlock').addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                // Get all checked checkboxes
+                const checkedSelectors = Array.from(document.querySelectorAll('.tabtamer-selector-checkbox:checked'))
+                    .map(cb => cb.dataset.selector);
+
+                if (checkedSelectors.length === 0) {
+                    // If nothing checked, treat as cancel
+                    chrome.runtime.sendMessage({ action: "CANCEL_ELEMENT_BLOCK" });
+                } else {
+                    chrome.runtime.sendMessage({ action: "CONFIRM_ELEMENT_BLOCK" });
+                }
                 overlay.remove();
             });
 
-            document.getElementById('tabtamerConfirmCancel').addEventListener('click', () => {
+            // Handle cancel button
+            document.getElementById('tabtamerConfirmCancel').addEventListener('click', (e) => {
+                e.stopPropagation();
                 chrome.runtime.sendMessage({ action: "CANCEL_ELEMENT_BLOCK" });
                 overlay.remove();
             });
 
-            // Auto-remove if user clicks outside
+            // Auto-remove after 30 seconds
             setTimeout(() => {
                 if (document.body.contains(overlay)) {
                     overlay.remove();
                     chrome.runtime.sendMessage({ action: "CANCEL_ELEMENT_BLOCK" });
                 }
-            }, 10000); // Auto-cancel after 10 seconds
+            }, 30000);
         });
+    }
+
+    // Update confirmation UI when items are removed
+    function updateConfirmationUI(selectors, count) {
+        const overlay = document.getElementById('tabtamer-confirm-overlay');
+        if (!overlay) return;
+
+        // Update badge
+        const badge = overlay.querySelector('.tabtamer-badge');
+        if (badge) badge.textContent = count;
+
+        // Update button text
+        const blockBtn = overlay.querySelector('#tabtamerConfirmBlock');
+        if (blockBtn) {
+            blockBtn.textContent = `Block Selected (${count})`;
+        }
     }
 
     // Force stop picker (for reset)
@@ -221,12 +515,8 @@ if (window.tabTamerInitialized) {
 
     // picker lifecycle
     function startPicker() {
-        console.log("startPicker() called");
-
-        // Check if already active with debounce
         if (window.tabTamerPickerActive) {
             const now = Date.now();
-            // If it's been less than 500ms since last start, ignore (prevents double-click)
             if (window.tabTamer.pickerStartTime && (now - window.tabTamer.pickerStartTime < 500)) {
                 console.log("Picker start debounced");
                 return;
@@ -239,13 +529,11 @@ if (window.tabTamerInitialized) {
         window.tabTamerPickerActive = true;
         window.tabTamer.pickerActive = true;
 
-        // Add event listeners
         document.addEventListener("mousemove", onHover, true);
         document.addEventListener("click", onClick, true);
         document.addEventListener("keydown", onKeyDown, true);
 
-        console.log("✅ Element picker started - hover over elements to see dotted outline");
-        console.log("Click any element to block it");
+        console.log("✅ Element picker started - Click multiple elements to add to stack");
     }
 
     function stopPicker() {
@@ -262,12 +550,26 @@ if (window.tabTamerInitialized) {
         console.log("Element picker stopped");
     }
 
-    // hover highlight
+    // hover highlight - EXCLUDE overlay and its children
     function onHover(e) {
         if (!window.tabTamer.pickerActive) return;
 
+        // Don't highlight if target is the overlay or its children
+        const target = e.target;
+        if (target.closest && (
+            target.closest('#tabtamer-confirm-overlay') ||
+            target.closest('#tabtamer-counter') ||
+            target.closest('#tabtamer-finish-button')
+        )) {
+            if (window.tabTamer.hoveredEl) {
+                window.tabTamer.hoveredEl.classList.remove(HOVER_CLASS);
+                window.tabTamer.hoveredEl = null;
+            }
+            return;
+        }
+
         if (window.tabTamer.hoveredEl) window.tabTamer.hoveredEl.classList.remove(HOVER_CLASS);
-        window.tabTamer.hoveredEl = e.target;
+        window.tabTamer.hoveredEl = target;
         window.tabTamer.hoveredEl.classList.add(HOVER_CLASS);
     }
 
@@ -276,47 +578,114 @@ if (window.tabTamerInitialized) {
         window.tabTamer.hoveredEl = null;
     }
 
-    // click → preview hide ONLY
+    // click - EXCLUDE overlay and its children
     function onClick(e) {
         if (!window.tabTamer.pickerActive) return;
+
+        // Don't select if target is the overlay or its children
+        const target = e.target;
+        if (target.closest && (
+            target.closest('#tabtamer-confirm-overlay') ||
+            target.closest('#tabtamer-counter') ||
+            target.closest('#tabtamer-finish-button')
+        )) {
+            return;
+        }
 
         e.preventDefault();
         e.stopPropagation();
 
-        window.tabTamer.lastHiddenEl = e.target;
-        window.tabTamer.lastSelector = getUniqueSelector(window.tabTamer.lastHiddenEl);
+        const element = target;
+        const selector = getUniqueSelector(element);
 
-        window.tabTamer.lastHiddenEl.style.display = "none";
+        // Store element and selector
+        window.tabTamer.hiddenElements.push({
+            element: element,
+            selector: selector,
+            originalDisplay: element.style.display
+        });
 
-        // Stop picker first
-        stopPicker();
+        // Hide the element
+        element.style.display = "none";
 
-        // Send message to background
+        // Update count
+        window.tabTamer.selectionCount = window.tabTamer.hiddenElements.length;
+        updateCounter(window.tabTamer.selectionCount);
+        updateFinishButton(window.tabTamer.selectionCount);
+
+        console.log(`Element ${window.tabTamer.selectionCount} added to stack:`, selector);
+
+        // Send message to background (just for tracking, not for confirmation yet)
         try {
             chrome.runtime.sendMessage({
-                action: "ELEMENT_BLOCK_PREVIEW",
-                selector: window.tabTamer.lastSelector
+                action: "ELEMENT_ADDED_TO_STACK",
+                selector: selector,
+                count: window.tabTamer.selectionCount
             });
         } catch (error) {
             console.error("Failed to send message to background:", error);
-            undoLast();
         }
+
+        // Keep picker active for more selections
     }
 
-    // ESC → cancel
+    // ESC → cancel all
     function onKeyDown(e) {
         if (e.key === "Escape") {
-            undoLast();
+            // Restore all hidden elements
+            window.tabTamer.hiddenElements.forEach(item => {
+                if (item.element && item.element.parentNode) {
+                    item.element.style.display = item.originalDisplay || "";
+                }
+            });
+
+            window.tabTamer.hiddenElements = [];
+            window.tabTamer.selectionCount = 0;
+
+            removeUI();
             stopPicker();
         }
     }
 
     function undoLast() {
-        if (window.tabTamer.lastHiddenEl) {
-            window.tabTamer.lastHiddenEl.style.display = "";
-            window.tabTamer.lastHiddenEl = null;
-            window.tabTamer.lastSelector = null;
+        if (window.tabTamer.hiddenElements.length > 0) {
+            const last = window.tabTamer.hiddenElements.pop();
+            if (last.element && last.element.parentNode) {
+                last.element.style.display = last.originalDisplay || "";
+            }
+            window.tabTamer.selectionCount = window.tabTamer.hiddenElements.length;
+            updateCounter(window.tabTamer.selectionCount);
+            updateFinishButton(window.tabTamer.selectionCount);
+            console.log(`Undid last element. Remaining: ${window.tabTamer.selectionCount}`);
         }
+    }
+
+    function undoAllElements(selectorsToUndo = null) {
+        if (selectorsToUndo) {
+            // Undo specific selectors
+            window.tabTamer.hiddenElements = window.tabTamer.hiddenElements.filter(item => {
+                if (selectorsToUndo.includes(item.selector)) {
+                    if (item.element && item.element.parentNode) {
+                        item.element.style.display = item.originalDisplay || "";
+                    }
+                    return false;
+                }
+                return true;
+            });
+        } else {
+            // Undo all
+            window.tabTamer.hiddenElements.forEach(item => {
+                if (item.element && item.element.parentNode) {
+                    item.element.style.display = item.originalDisplay || "";
+                }
+            });
+            window.tabTamer.hiddenElements = [];
+        }
+
+        window.tabTamer.selectionCount = window.tabTamer.hiddenElements.length;
+        updateCounter(window.tabTamer.selectionCount);
+        updateFinishButton(window.tabTamer.selectionCount);
+        console.log(`Elements restored. Remaining: ${window.tabTamer.selectionCount}`);
     }
 
     // selector generator
@@ -380,5 +749,6 @@ if (window.tabTamerInitialized) {
         if (window.tabTamerPickerActive) {
             stopPicker();
         }
+        removeUI();
     });
 }
