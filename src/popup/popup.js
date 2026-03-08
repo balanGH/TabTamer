@@ -105,6 +105,44 @@ document.getElementById("blockElementBtn").onclick = async () => {
   }
 };
 
+// Video Speed Controller Toggle
+document.getElementById('videoSpeedBtn').addEventListener('click', () => {
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+    const enabled = !(preferences.videoControlEnabled ?? true);
+
+    preferences.videoControlEnabled = enabled;
+
+    chrome.storage.local.set({ preferences }, () => {
+      // Send message to all tabs to toggle video controller
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach(tab => {
+          if (tab.url && (tab.url.startsWith('http') || tab.url.startsWith('https'))) {
+            chrome.tabs.sendMessage(tab.id, {
+              action: "TOGGLE_VIDEO_CONTROL",
+              enabled: enabled
+            }).catch(() => {
+              // Ignore errors - content script might not be loaded
+            });
+          }
+        });
+      });
+
+      // Update button appearance
+      const btn = document.getElementById('videoSpeedBtn');
+      btn.style.opacity = enabled ? '1' : '0.5';
+      btn.title = enabled ? 'Video Speed Controller (On)' : 'Video Speed Controller (Off)';
+    });
+  });
+});
+
+// Load initial state
+chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+  const enabled = preferences.videoControlEnabled ?? true;
+  const btn = document.getElementById('videoSpeedBtn');
+  btn.style.opacity = enabled ? '1' : '0.5';
+  btn.title = enabled ? 'Video Speed Controller (On)' : 'Video Speed Controller (Off)';
+});
+
 // Dark Mode Toggle
 document.getElementById('darkModeToggle').addEventListener('click', () => {
   chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {

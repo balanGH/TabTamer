@@ -44,7 +44,8 @@
       "js": [
         "src/content/contentToast.js",
         "src/content/contentBlocker.js",
-        "src/content/contentScript.js"
+        "src/content/contentScript.js",
+        "src/content/videoController.js"
       ],
       "run_at": "document_idle"
     }
