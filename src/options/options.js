@@ -212,35 +212,6 @@ function removeLimit(domain) {
   });
 }
 
-// Video speed settings
-document.getElementById('defaultVideoSpeed').addEventListener('change', (e) => {
-  const speed = parseFloat(e.target.value);
-
-  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
-    preferences.defaultVideoSpeed = speed;
-    chrome.storage.local.set({ preferences });
-
-    // Apply to all tabs
-    chrome.tabs.query({}, (tabs) => {
-      tabs.forEach(tab => {
-        if (tab.url && (tab.url.startsWith('http') || tab.url.startsWith('https'))) {
-          chrome.tabs.sendMessage(tab.id, {
-            action: "SET_DEFAULT_SPEED",
-            speed: speed
-          }).catch(() => { });
-        }
-      });
-    });
-  });
-});
-
-// Load saved default speed
-chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
-  if (preferences.defaultVideoSpeed) {
-    document.getElementById('defaultVideoSpeed').value = preferences.defaultVideoSpeed;
-  }
-});
-
 // ------------------ CSS / ELEMENT BLOCK ------------------
 document.getElementById("saveCssBtn").onclick = () => {
   const domain = cssDomain.value.trim().replace(/^www\./, '');
@@ -325,6 +296,7 @@ function loadAll() {
   loadUsageGraph();
   loadLimits();
   loadCssList();
+  loadVideoSpeedSettings();
 }
 
 loadAll();

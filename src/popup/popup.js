@@ -113,6 +113,12 @@ document.getElementById('videoSpeedBtn').addEventListener('click', () => {
     preferences.videoControlEnabled = enabled;
 
     chrome.storage.local.set({ preferences }, () => {
+      // Update button appearance
+      const btn = document.getElementById('videoSpeedBtn');
+      btn.textContent = enabled ? '🎬' : '🎬';
+      btn.style.opacity = enabled ? '1' : '0.5';
+      btn.title = enabled ? 'Video Speed Controller (On)' : 'Video Speed Controller (Off)';
+
       // Send message to all tabs to toggle video controller
       chrome.tabs.query({}, (tabs) => {
         tabs.forEach(tab => {
@@ -126,15 +132,19 @@ document.getElementById('videoSpeedBtn').addEventListener('click', () => {
           }
         });
       });
-
-      // Update button appearance
-      const btn = document.getElementById('videoSpeedBtn');
-      btn.style.opacity = enabled ? '1' : '0.5';
-      btn.title = enabled ? 'Video Speed Controller (On)' : 'Video Speed Controller (Off)';
     });
   });
 });
 
+// Load initial video controller state
+chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+  const enabled = preferences.videoControlEnabled ?? true;
+  const btn = document.getElementById('videoSpeedBtn');
+  if (btn) {
+    btn.style.opacity = enabled ? '1' : '0.5';
+    btn.title = enabled ? 'Video Speed Controller (On)' : 'Video Speed Controller (Off)';
+  }
+});
 // Load initial state
 chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
   const enabled = preferences.videoControlEnabled ?? true;

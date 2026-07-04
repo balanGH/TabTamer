@@ -13,15 +13,21 @@ const videoState = {
 const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0];
 
 // Load preferences
-chrome.storage.local.get(['videoSpeedPrefs', 'preferences'], (data) => {
-    videoState.enabled = data.preferences?.videoControlEnabled ?? true;
+function loadPreferences() {
+    chrome.storage.local.get(['videoSpeedPrefs', 'preferences'], (data) => {
+        videoState.enabled = data.preferences?.videoControlEnabled ?? true;
 
-    // Load per-domain speed preferences
-    if (data.videoSpeedPrefs) {
-        const domain = window.location.hostname.replace(/^www\./, '');
-        videoState.defaultSpeed = data.videoSpeedPrefs[domain] || 1.0;
-    }
-});
+        // Load per-domain speed preferences
+        if (data.videoSpeedPrefs) {
+            const domain = window.location.hostname.replace(/^www\./, '');
+            videoState.defaultSpeed = data.videoSpeedPrefs[domain] ||
+                data.preferences?.defaultVideoSpeed ||
+                1.0;
+        }
+    });
+}
+
+loadPreferences();
 
 // Listen for messages from popup/background
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -35,6 +41,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 }
             });
             videoState.videos.clear();
+            videoState.speeds.clear();
         } else {
             // Re-initialize for existing videos
             document.querySelectorAll('video').forEach(initVideoController);
@@ -57,17 +64,24 @@ function initVideoController(video) {
     if (!videoState.enabled) return;
     if (videoState.videos.has(video)) return; // Already has controller
 
+    // Don't add controller to very small videos (likely ads or icons)
+    if (video.offsetWidth < 200 || video.offsetHeight < 100) return;
+
     // Create controller element
     const controller = document.createElement('div');
     controller.className = 'tabtamer-video-controller';
+
+    // Get current speed (use saved if available)
+    const currentSpeed = videoState.speeds.get(video) || video.playbackRate || videoState.defaultSpeed;
+
     controller.innerHTML = `
-        <div class="tabtamer-speed-display">${video.playbackRate.toFixed(2)}x</div>
+        <div class="tabtamer-speed-display">${currentSpeed.toFixed(2)}x</div>
         <div class="tabtamer-speed-controls">
             <button class="tabtamer-speed-btn" data-speed="0.5">0.5x</button>
             <button class="tabtamer-speed-btn" data-speed="1.0">1x</button>
             <button class="tabtamer-speed-btn" data-speed="1.5">1.5x</button>
             <button class="tabtamer-speed-btn" data-speed="2.0">2x</button>
-            <input type="range" class="tabtamer-speed-slider" min="0.25" max="4" step="0.05" value="${video.playbackRate}">
+            <input type="range" class="tabtamer-speed-slider" min="0.25" max="4" step="0.05" value="${currentSpeed}">
         </div>
     `;
 
@@ -76,7 +90,7 @@ function initVideoController(video) {
         position: 'absolute',
         top: '10px',
         right: '10px',
-        background: 'rgba(0, 0, 0, 0.8)',
+        background: 'rgba(0, 0, 0, 0.85)',
         color: 'white',
         borderRadius: '8px',
         padding: '8px',
@@ -144,15 +158,14 @@ function initVideoController(video) {
     });
 
     // Position controller relative to video
-    const videoRect = video.getBoundingClientRect();
-    if (videoRect.width > 100) {
-        controller.style.top = videoRect.top + 10 + 'px';
-        controller.style.right = (window.innerWidth - videoRect.right) + 10 + 'px';
-    }
+    positionController(video, controller);
 
     // Add to DOM
     document.body.appendChild(controller);
     videoState.videos.set(video, controller);
+
+    // Apply saved speed
+    setVideoSpeed(video, currentSpeed);
 
     // Set up event listeners
     setupControllerEvents(video, controller);
@@ -168,11 +181,7 @@ function initVideoController(video) {
 
     // Update position on scroll/resize
     const updatePosition = () => {
-        const rect = video.getBoundingClientRect();
-        if (rect.width > 100) {
-            controller.style.top = rect.top + 10 + 'px';
-            controller.style.right = (window.innerWidth - rect.right) + 10 + 'px';
-        }
+        positionController(video, controller);
     };
 
     window.addEventListener('scroll', updatePosition, { passive: true });
@@ -181,7 +190,7 @@ function initVideoController(video) {
     // Clean up on video removal
     const observer = new MutationObserver((mutations) => {
         if (!document.body.contains(video)) {
-            controller.remove();
+            if (controller.parentNode) controller.remove();
             videoState.videos.delete(video);
             videoState.speeds.delete(video);
             observer.disconnect();
@@ -189,6 +198,18 @@ function initVideoController(video) {
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
+}
+
+// Position controller relative to video
+function positionController(video, controller) {
+    const rect = video.getBoundingClientRect();
+    if (rect.width > 100 && rect.height > 50) {
+        controller.style.top = rect.top + 10 + 'px';
+        controller.style.right = (window.innerWidth - rect.right) + 10 + 'px';
+        controller.style.display = 'block';
+    } else {
+        controller.style.display = 'none';
+    }
 }
 
 // Set up event listeners for controller
@@ -248,11 +269,6 @@ function setVideoSpeed(video, speed) {
     speed = Math.max(0.25, Math.min(4, speed));
     video.playbackRate = speed;
     videoState.speeds.set(video, speed);
-
-    // Also handle any audio elements that might be associated
-    if (video.audioTracks) {
-        // For some video players
-    }
 }
 
 // Update controller display
