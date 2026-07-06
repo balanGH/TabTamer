@@ -37,6 +37,24 @@
       <div id="limitsList"></div>
     </section>
 
+    <!-- BREAK REMINDERS -->
+    <section class="card">
+      <h2>Break Reminders</h2>
+      <p class="card-description">Get notified to take a break after continuous browsing.</p>
+      <div class="row">
+        <select id="breakInterval">
+          <option value="0">Disabled</option>
+          <option value="3">Every 3 minutes</option><!--for checking-->
+          <option value="30">Every 30 minutes</option>
+          <option value="45">Every 45 minutes</option>
+          <option value="60">Every 60 minutes</option>
+          <option value="90">Every 90 minutes</option>
+          <option value="120">Every 2 hours</option>
+        </select>
+        <button id="saveBreakBtn">Save</button>
+      </div>
+    </section>
+
     <!-- ELEMENT / CSS BLOCK -->
     <section class="card">
       <h2>Custom CSS / Element Block</h2>
@@ -48,13 +66,35 @@
       <div id="cssList"></div>
     </section>
 
-    <!-- BACKUP -->
+    <!-- BACKUP & EXPORT -->
     <section class="card">
-      <h2>Backup & Restore</h2>
-      <button id="exportBtn">Export Backup</button>
-      <input type="file" id="importFile" hidden />
-      <button id="importBtn">Import Backup</button>
+      <h2>Backup & Export</h2>
+      <div class="button-row">
+        <button id="exportBtn">Export JSON Backup</button>
+        <button id="csvExportBtn">Export CSV</button>
+        <input type="file" id="importFile" hidden />
+        <button id="importBtn">Import Backup</button>
+      </div>
       <p id="status"></p>
+    </section>
+
+    <!-- KEYBOARD SHORTCUTS -->
+    <section class="card">
+      <h2>Keyboard Shortcuts</h2>
+      <div class="shortcut-list">
+        <div class="shortcut-item">
+          <span class="shortcut-label">Toggle Focus Mode</span>
+          <kbd>Alt + F</kbd>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-label">Start Element Picker</span>
+          <kbd>Alt + P</kbd>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-label">Right-click any element</span>
+          <span class="shortcut-note">Context menu → "Block this element"</span>
+        </div>
+      </div>
     </section>
   </div>
 

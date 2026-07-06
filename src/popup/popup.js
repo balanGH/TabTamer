@@ -3,6 +3,7 @@
 
 let weekChart = null;
 let monthChart = null;
+let focusTimerInterval = null;
 
 // Load user preferences from local storage
 chrome.storage.local.get(['preferences'], ({ preferences }) => {
@@ -20,115 +21,177 @@ chrome.storage.local.get(['preferences'], ({ preferences }) => {
     prefs.audioTracking ? '🔊' : '🔇';
 });
 
-// -------------------- Block Element Button (MV3 safe) --------------------
+// ==================== FOCUS MODE ====================
+let focusPanelOpen = false;
+
+document.getElementById('focusModeBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'getFocusState' }, (response) => {
+    if (response?.focusState?.active) {
+      // Already active — toggle stop
+      if (confirm('Stop Focus Mode?')) {
+        chrome.runtime.sendMessage({ action: 'stopFocusMode' }, () => {
+          updateFocusUI({ active: false });
+        });
+      }
+    } else {
+      // Show setup panel
+      const panel = document.getElementById('focusPanel');
+      focusPanelOpen = !focusPanelOpen;
+      panel.style.display = focusPanelOpen ? 'block' : 'none';
+    }
+  });
+});
+
+// Focus preset buttons
+document.querySelectorAll('.focus-preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.focus-preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Start Focus
+document.getElementById('startFocusBtn').addEventListener('click', () => {
+  const activePreset = document.querySelector('.focus-preset-btn.active');
+  const duration = parseInt(activePreset?.dataset.minutes || '25');
+
+  const blockedCategories = Array.from(
+    document.querySelectorAll('.focus-categories input:checked')
+  ).map(cb => cb.value);
+
+  chrome.runtime.sendMessage({
+    action: 'startFocusMode',
+    duration,
+    blockedCategories
+  }, (response) => {
+    if (response?.focusState) {
+      updateFocusUI(response.focusState);
+      document.getElementById('focusPanel').style.display = 'none';
+      focusPanelOpen = false;
+    }
+  });
+});
+
+document.getElementById('cancelFocusBtn').addEventListener('click', () => {
+  document.getElementById('focusPanel').style.display = 'none';
+  focusPanelOpen = false;
+});
+
+document.getElementById('stopFocusBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'stopFocusMode' }, () => {
+    updateFocusUI({ active: false });
+  });
+});
+
+function updateFocusUI(focusState) {
+  const banner = document.getElementById('focusBanner');
+  const btn = document.getElementById('focusModeBtn');
+
+  if (focusState?.active) {
+    banner.style.display = 'block';
+    btn.style.opacity = '1';
+    btn.style.background = '#667eea';
+    btn.style.color = 'white';
+    btn.style.borderColor = '#667eea';
+    startFocusTimer(focusState.endTime);
+  } else {
+    banner.style.display = 'none';
+    btn.style.opacity = '';
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+    if (focusTimerInterval) {
+      clearInterval(focusTimerInterval);
+      focusTimerInterval = null;
+    }
+  }
+}
+
+function startFocusTimer(endTime) {
+  if (focusTimerInterval) clearInterval(focusTimerInterval);
+
+  function tick() {
+    const remaining = Math.max(0, endTime - Date.now());
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    document.getElementById('focusTimer').textContent =
+      `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+    if (remaining <= 0) {
+      clearInterval(focusTimerInterval);
+      focusTimerInterval = null;
+      updateFocusUI({ active: false });
+    }
+  }
+
+  tick();
+  focusTimerInterval = setInterval(tick, 1000);
+}
+
+// ==================== BLOCK ELEMENT BUTTON ====================
 document.getElementById("blockElementBtn").onclick = async () => {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tabs[0] || !tabs[0].id) return;
 
-  // Check if we're on a valid URL (not chrome://, edge://, about:, etc.)
   const url = tabs[0].url || '';
-
-  // List of restricted URL schemes
   const restrictedSchemes = [
-    'chrome://',
-    'edge://',
-    'about:',
-    'chrome-extension://',
-    'moz-extension://',
-    'view-source:',
-    'data:',
-    'brave://',
-    'opera://'
+    'chrome://', 'edge://', 'about:', 'chrome-extension://',
+    'moz-extension://', 'view-source:', 'data:', 'brave://', 'opera://'
   ];
 
-  // Check if URL is restricted
-  const isRestricted = restrictedSchemes.some(scheme => url.startsWith(scheme));
-
-  if (isRestricted) {
-    // Show user-friendly message
-    alert("Element picker cannot be used on browser internal pages (chrome://, edge://, etc.). Please navigate to a regular website and try again.");
-
-    // Re-enable button
-    const btn = document.getElementById("blockElementBtn");
-    btn.disabled = false;
-    btn.style.opacity = "1";
+  if (restrictedSchemes.some(scheme => url.startsWith(scheme))) {
+    alert("Element picker cannot be used on browser internal pages. Please navigate to a regular website.");
     return;
   }
 
-  // Disable button to prevent double clicks
   const btn = document.getElementById("blockElementBtn");
   btn.disabled = true;
   btn.style.opacity = "0.5";
 
   try {
-    // Try to send message first (while popup is still open)
     try {
       await chrome.tabs.sendMessage(tabs[0].id, { action: "START_ELEMENT_PICKER" });
-      console.log("Picker message sent to existing content script");
-    } catch (error) {
-      // Content script not loaded, inject it
-      console.log("Content script not found, injecting...");
-
-      // Check if we can inject scripts on this page
+    } catch {
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tabs[0].id },
           files: ['src/content/contentScript.js']
         });
-
-        // Wait for script to initialize
         await new Promise(resolve => setTimeout(resolve, 150));
-
-        // Send message again
         await chrome.tabs.sendMessage(tabs[0].id, { action: "START_ELEMENT_PICKER" });
-        console.log("Picker message sent after injection");
-      } catch (injectError) {
-        console.error("Cannot inject script on this page:", injectError);
-        alert("Element picker cannot be used on this type of page. Please navigate to a regular website.");
-
-        // Re-enable button
+      } catch {
+        alert("Element picker cannot be used on this page.");
         btn.disabled = false;
         btn.style.opacity = "1";
         return;
       }
     }
-
-    // Close popup after message is sent
     window.close();
-
-  } catch (error) {
-    console.error("Failed to start element picker:", error);
-    // Re-enable button if there's an error
+  } catch {
     btn.disabled = false;
     btn.style.opacity = "1";
-    alert("Failed to start element picker. Please try again on a regular website.");
+    alert("Failed to start element picker.");
   }
 };
 
-// Video Speed Controller Toggle
+// ==================== VIDEO SPEED CONTROLLER ====================
 document.getElementById('videoSpeedBtn').addEventListener('click', () => {
   chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
     const enabled = !(preferences.videoControlEnabled ?? true);
-
     preferences.videoControlEnabled = enabled;
 
     chrome.storage.local.set({ preferences }, () => {
-      // Update button appearance
       const btn = document.getElementById('videoSpeedBtn');
-      btn.textContent = enabled ? '🎬' : '🎬';
       btn.style.opacity = enabled ? '1' : '0.5';
       btn.title = enabled ? 'Video Speed Controller (On)' : 'Video Speed Controller (Off)';
 
-      // Send message to all tabs to toggle video controller
       chrome.tabs.query({}, (tabs) => {
         tabs.forEach(tab => {
-          if (tab.url && (tab.url.startsWith('http') || tab.url.startsWith('https'))) {
+          if (tab.url && tab.url.startsWith('http')) {
             chrome.tabs.sendMessage(tab.id, {
               action: "TOGGLE_VIDEO_CONTROL",
-              enabled: enabled
-            }).catch(() => {
-              // Ignore errors - content script might not be loaded
-            });
+              enabled
+            }).catch(() => {});
           }
         });
       });
@@ -146,41 +209,31 @@ chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
   }
 });
 
-// Audio Tracking Toggle
+// ==================== AUDIO TRACKING ====================
 document.getElementById('audioToggle').addEventListener('click', () => {
   chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
     const enabled = !preferences.audioTracking;
-
     preferences.audioTracking = enabled;
 
     chrome.storage.local.set({ preferences }, () => {
-      chrome.runtime.sendMessage({
-        action: 'toggleAudioTracking',
-        enabled
-      });
-
-      document.getElementById('audioToggle').textContent =
-        enabled ? '🔊' : '🔇';
+      chrome.runtime.sendMessage({ action: 'toggleAudioTracking', enabled });
+      document.getElementById('audioToggle').textContent = enabled ? '🔊' : '🔇';
     });
   });
 });
 
-// Settings and Clear Data Buttons
+// Settings Button
 document.getElementById('settingsBtn').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 
-// Format milliseconds to human-readable time
-// Replace formatTime function with improved version:
-
+// ==================== HELPERS ====================
 function formatTime(ms) {
   if (ms < 1000) return '0s';
-
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
 
-  // Return appropriate format
   if (hours > 0) {
     const remainingMinutes = minutes % 60;
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
@@ -192,31 +245,124 @@ function formatTime(ms) {
   }
 }
 
-// Get date key (YYYY-MM-DD)
 function getDateKey(daysAgo = 0) {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
   return date.toISOString().split('T')[0];
 }
 
-// Get day name from date key
 function getDayName(dateKey) {
   const date = new Date(dateKey);
   return date.toLocaleDateString('en-US', { weekday: 'short' });
 }
 
-// Get short date (MM/DD) from date key
 function getShortDate(dateKey) {
   const date = new Date(dateKey);
   return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
 }
 
-// Get first letter of domain for favicon
-function getInitial(domain) {
-  return domain.charAt(0).toUpperCase();
+// ==================== PRODUCTIVITY SCORE ====================
+const PRODUCTIVE_CATEGORIES = ['work'];
+const DISTRACTING_CATEGORIES = ['social', 'entertainment', 'shopping'];
+
+function calculateProductivityScore(sites, dateKey) {
+  let productiveMs = 0;
+  let distractingMs = 0;
+  let totalMs = 0;
+
+  sites.forEach(site => {
+    const time = site.dailyTime[dateKey] || 0;
+    if (time <= 0) return;
+    totalMs += time;
+
+    const cat = site.category || 'other';
+    if (PRODUCTIVE_CATEGORIES.includes(cat)) {
+      productiveMs += time;
+    } else if (DISTRACTING_CATEGORIES.includes(cat)) {
+      distractingMs += time;
+    }
+  });
+
+  if (totalMs === 0) return null;
+
+  // Score: 100 if all productive, 0 if all distracting
+  // neutral sites contribute 50/100
+  const neutralMs = totalMs - productiveMs - distractingMs;
+  const score = Math.round(
+    ((productiveMs * 100 + neutralMs * 50) / totalMs)
+  );
+
+  return Math.max(0, Math.min(100, score));
 }
 
-// Render sites list
+function updateProductivityUI(score) {
+  const scoreEl = document.getElementById('productivityScore');
+  const barEl = document.getElementById('productivityBar');
+
+  if (score === null) {
+    scoreEl.textContent = '--';
+    barEl.style.width = '0%';
+    barEl.className = 'productivity-bar';
+    return;
+  }
+
+  scoreEl.textContent = score;
+  barEl.style.width = score + '%';
+
+  barEl.className = 'productivity-bar';
+  if (score >= 70) barEl.classList.add('high');
+  else if (score >= 40) barEl.classList.add('medium');
+  else barEl.classList.add('low');
+}
+
+// ==================== COMPARISON STATS ====================
+function updateComparisonStats(sites) {
+  const today = getDateKey(0);
+  const yesterday = getDateKey(1);
+
+  let todayTotal = 0;
+  let yesterdayTotal = 0;
+  let lastWeekTotal = 0;
+
+  sites.forEach(site => {
+    todayTotal += site.dailyTime[today] || 0;
+    yesterdayTotal += site.dailyTime[yesterday] || 0;
+    for (let i = 1; i <= 7; i++) {
+      lastWeekTotal += site.dailyTime[getDateKey(i)] || 0;
+    }
+  });
+
+  const lastWeekAvg = lastWeekTotal / 7;
+
+  const vsYesterdayEl = document.getElementById('vsYesterday');
+  const vsLastWeekEl = document.getElementById('vsLastWeek');
+
+  if (yesterdayTotal > 0) {
+    const diff = todayTotal - yesterdayTotal;
+    const pct = Math.round((diff / yesterdayTotal) * 100);
+    const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
+    const cls = diff > 0 ? 'up' : diff < 0 ? 'down' : 'same';
+    vsYesterdayEl.textContent = `${arrow} ${Math.abs(pct)}%`;
+    vsYesterdayEl.className = `comparison-value ${cls}`;
+  } else {
+    vsYesterdayEl.textContent = todayTotal > 0 ? '↑ New' : '--';
+    vsYesterdayEl.className = 'comparison-value';
+  }
+
+  if (lastWeekAvg > 0) {
+    const diff = todayTotal - lastWeekAvg;
+    const pct = Math.round((diff / lastWeekAvg) * 100);
+    const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
+    const cls = diff > 0 ? 'up' : diff < 0 ? 'down' : 'same';
+    vsLastWeekEl.textContent = `${arrow} ${Math.abs(pct)}%`;
+    vsLastWeekEl.className = `comparison-value ${cls}`;
+  } else {
+    vsLastWeekEl.textContent = '--';
+    vsLastWeekEl.className = 'comparison-value';
+  }
+}
+
+// ==================== RENDER SITES ====================
 function renderSites(sites, containerId, dateFilter = null) {
   const container = document.getElementById(containerId);
 
@@ -225,37 +371,27 @@ function renderSites(sites, containerId, dateFilter = null) {
     return;
   }
 
-  // Filter sites by date if needed
   let filteredSites = sites;
   if (dateFilter) {
     filteredSites = sites.map(site => {
       let totalTime = 0;
       if (dateFilter === 'today') {
-        const today = getDateKey(0);
-        totalTime = site.dailyTime[today] || 0;
+        totalTime = site.dailyTime[getDateKey(0)] || 0;
       } else if (dateFilter === 'week') {
-        for (let i = 0; i < 7; i++) {
-          const dateKey = getDateKey(i);
-          totalTime += site.dailyTime[dateKey] || 0;
-        }
+        for (let i = 0; i < 7; i++) totalTime += site.dailyTime[getDateKey(i)] || 0;
       } else if (dateFilter === 'month') {
-        for (let i = 0; i < 30; i++) {
-          const dateKey = getDateKey(i);
-          totalTime += site.dailyTime[dateKey] || 0;
-        }
+        for (let i = 0; i < 30; i++) totalTime += site.dailyTime[getDateKey(i)] || 0;
       }
       return { ...site, filteredTime: totalTime };
     }).filter(site => site.filteredTime > 0);
   }
 
-  // Sort by time (descending)
   const sortedSites = [...filteredSites].sort((a, b) => {
     const timeA = a.filteredTime !== undefined ? a.filteredTime : a.totalTime;
     const timeB = b.filteredTime !== undefined ? b.filteredTime : b.totalTime;
     return timeB - timeA;
   });
 
-  // Take top 10
   const topSites = sortedSites.slice(0, 10);
 
   if (topSites.length === 0) {
@@ -265,41 +401,29 @@ function renderSites(sites, containerId, dateFilter = null) {
 
   container.innerHTML = topSites.map(site => {
     const time = site.filteredTime !== undefined ? site.filteredTime : site.totalTime;
-    const faviconUrl = `https://www.google.com/s2/favicons?domain=${site.domain}&sz=32`;
+    const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.domain)}&sz=32`;
+    const cat = site.category || 'other';
+    const catLabel = cat.charAt(0).toUpperCase() + cat.slice(1);
 
     return `
     <div class="site-item">
       <div class="site-info">
-        <img 
-          class="site-favicon" 
-          src="${faviconUrl}" 
-          alt="${site.domain} favicon"
-          loading="lazy"
-        />
-        <div class="site-domain" title="${site.domain}">
-          ${site.domain}
-        </div>
+        <img class="site-favicon" src="${faviconUrl}" alt="" loading="lazy" />
+        <div class="site-domain" title="${site.domain}">${site.domain}</div>
+        <span class="site-category cat-${cat}">${catLabel}</span>
       </div>
       <div class="site-time">${formatTime(time)}</div>
     </div>
   `;
   }).join('');
-
 }
 
-// Add cleanup function before creating new charts
+// ==================== CHARTS ====================
 function cleanupCharts() {
-  if (weekChart) {
-    weekChart.destroy();
-    weekChart = null;
-  }
-  if (monthChart) {
-    monthChart.destroy();
-    monthChart = null;
-  }
+  if (weekChart) { weekChart.destroy(); weekChart = null; }
+  if (monthChart) { monthChart.destroy(); monthChart = null; }
 }
 
-// Create or update week chart
 function createWeekChart(sites) {
   const ctx = document.getElementById('weekChart');
   if (!ctx) return;
@@ -309,14 +433,9 @@ function createWeekChart(sites) {
 
   for (let i = 6; i >= 0; i--) {
     const dateKey = getDateKey(i);
-    const dayName = getDayName(dateKey);
-    labels.push(dayName);
-
+    labels.push(getDayName(dateKey));
     let totalTime = 0;
-    sites.forEach(site => {
-      totalTime += site.dailyTime[dateKey] || 0;
-    });
-
+    sites.forEach(site => { totalTime += site.dailyTime[dateKey] || 0; });
     data.push(Math.round(totalTime / 60000));
   }
 
@@ -330,10 +449,10 @@ function createWeekChart(sites) {
   weekChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: labels,
+      labels,
       datasets: [{
         label: 'Minutes',
-        data: data,
+        data,
         backgroundColor: 'rgba(102, 126, 234, 0.8)',
         borderColor: 'rgba(102, 126, 234, 1)',
         borderWidth: 2,
@@ -343,31 +462,12 @@ function createWeekChart(sites) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: false
-        },
-        tooltip: {
-          callbacks: {
-            label: function (context) {
-              return context.parsed.y + ' minutes';
-            }
-          }
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            precision: 0
-          }
-        }
-      }
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' minutes' } } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
   });
 }
 
-// Create or update month chart
 function createMonthChart(sites) {
   const ctx = document.getElementById('monthChart');
   if (!ctx) return;
@@ -377,14 +477,9 @@ function createMonthChart(sites) {
 
   for (let i = 29; i >= 0; i--) {
     const dateKey = getDateKey(i);
-    const shortDate = getShortDate(dateKey);
-    labels.push(shortDate);
-
+    labels.push(getShortDate(dateKey));
     let totalTime = 0;
-    sites.forEach(site => {
-      totalTime += site.dailyTime[dateKey] || 0;
-    });
-
+    sites.forEach(site => { totalTime += site.dailyTime[dateKey] || 0; });
     data.push(Math.round(totalTime / 60000));
   }
 
@@ -398,10 +493,10 @@ function createMonthChart(sites) {
   monthChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: labels,
+      labels,
       datasets: [{
         label: 'Minutes',
-        data: data,
+        data,
         backgroundColor: 'rgba(102, 126, 234, 0.8)',
         borderColor: 'rgba(102, 126, 234, 1)',
         borderWidth: 1,
@@ -411,75 +506,59 @@ function createMonthChart(sites) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: false
-        },
-        tooltip: {
-          callbacks: {
-            label: function (context) {
-              return context.parsed.y + ' minutes';
-            }
-          }
-        }
-      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' minutes' } } },
       scales: {
-        x: {
-          ticks: {
-            maxRotation: 45,
-            minRotation: 45,
-            font: {
-              size: 10
-            }
-          }
-        },
-        y: {
-          beginAtZero: true,
-          ticks: {
-            precision: 0
-          }
-        }
+        x: { ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { precision: 0 } }
       }
     }
   });
 }
 
-// Update all UI
+// ==================== UPDATE UI ====================
 function updateUI(sessionData) {
   const sites = Object.values(sessionData.sites);
-
-  // Update today's total
   const today = getDateKey(0);
+
+  // Today's total
   let todayTotal = 0;
-  sites.forEach(site => {
-    todayTotal += site.dailyTime[today] || 0;
-  });
+  sites.forEach(site => { todayTotal += site.dailyTime[today] || 0; });
   document.getElementById('todayTotal').textContent = formatTime(todayTotal);
 
-  // Update sites lists
+  // Productivity score
+  const score = calculateProductivityScore(sites, today);
+  updateProductivityUI(score);
+
+  // Comparison stats
+  updateComparisonStats(sites);
+
+  // Sites lists
   renderSites(sites, 'todaySites', 'today');
   renderSites(sites, 'weekSites', 'week');
   renderSites(sites, 'monthSites', 'month');
 
-  // Update charts
+  // Charts
   createWeekChart(sites);
   createMonthChart(sites);
+
+  // Focus mode
+  if (sessionData.focusState) {
+    updateFocusUI(sessionData.focusState);
+  }
 }
 
-// Load session data
+// ==================== LOAD DATA ====================
 let refreshInterval;
 async function loadData() {
   chrome.runtime.sendMessage({ action: 'getSessionData' }, (response) => {
-    if (response) {
-      updateUI(response);
-    }
+    if (response) updateUI(response);
   });
 }
+
 // Clean up when popup closes
 window.addEventListener('unload', () => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-  }
+  if (refreshInterval) clearInterval(refreshInterval);
+  if (focusTimerInterval) clearInterval(focusTimerInterval);
   cleanupCharts();
 });
 
@@ -487,12 +566,8 @@ window.addEventListener('unload', () => {
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const tabName = btn.dataset.tab;
-
-    // Update buttons
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-
-    // Update panels
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById(tabName).classList.add('active');
   });
@@ -501,60 +576,25 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // Clear session data
 document.getElementById('clearBtn').addEventListener('click', () => {
   if (confirm('Are you sure you want to clear all session data? This cannot be undone.')) {
-    chrome.runtime.sendMessage({ action: 'clearSession' }, () => {
-      loadData();
-    });
+    chrome.runtime.sendMessage({ action: 'clearSession' }, () => loadData());
   }
 });
 
-// Wrap all storage operations with error handling
-async function safeStorageOperation(operation) {
-  try {
-    return await operation();
-  } catch (error) {
-    console.error('Storage operation failed:', error);
-    showError('Failed to save settings. Please try again.');
-    return null;
-  }
-}
-
-function showError(message) {
-  const errorEl = document.createElement('div');
-  errorEl.className = 'error-toast';
-  errorEl.textContent = message;
-  errorEl.style.cssText = `
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    background: #ff4757;
-    color: white;
-    padding: 12px;
-    border-radius: 6px;
-    z-index: 9999;
-  `;
-  document.body.appendChild(errorEl);
-  setTimeout(() => errorEl.remove(), 3000);
-}
-
-// Update storage operations example
+// ==================== DARK MODE ====================
 document.getElementById('darkModeToggle').addEventListener('click', () => {
-  safeStorageOperation(async () => {
-    const { preferences = {} } = await chrome.storage.local.get(['preferences']);
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
     preferences.darkMode = !preferences.darkMode;
-
-    await chrome.storage.local.set({ preferences });
-
-    document.body.classList.toggle('dark', preferences.darkMode);
-    document.getElementById('darkModeToggle').textContent =
-      preferences.darkMode ? '☀' : '⏾';
+    chrome.storage.local.set({ preferences }, () => {
+      document.body.classList.toggle('dark', preferences.darkMode);
+      document.getElementById('darkModeToggle').textContent =
+        preferences.darkMode ? '☀' : '⏾';
+    });
   });
 });
 
 // Keep connection alive with background service worker
 const port = chrome.runtime.connect({ name: 'keepAlive' });
-port.onDisconnect.addListener(() => {
-  // Will reconnect automatically if needed
-});
+port.onDisconnect.addListener(() => {});
 
 // Load data on popup open
 loadData();

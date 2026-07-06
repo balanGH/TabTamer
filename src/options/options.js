@@ -26,7 +26,7 @@ function loadUsageGraph() {
     const rawData = [];
     const domainsForLimits = [];
 
-    let maxValue = 0; // track max in ms
+    let maxValue = 0;
 
     Object.entries(sites).forEach(([domain, info]) => {
       let totalMs = 0;
@@ -37,15 +37,13 @@ function loadUsageGraph() {
 
       if (range === 'week') {
         for (let i = 0; i < 7; i++) {
-          const dateKey = getDateKey(i);
-          totalMs += info.dailyTime?.[dateKey] || 0;
+          totalMs += info.dailyTime?.[getDateKey(i)] || 0;
         }
       }
 
       if (range === 'month') {
         for (let i = 0; i < 30; i++) {
-          const dateKey = getDateKey(i);
-          totalMs += info.dailyTime?.[dateKey] || 0;
+          totalMs += info.dailyTime?.[getDateKey(i)] || 0;
         }
       }
 
@@ -61,31 +59,28 @@ function loadUsageGraph() {
     populateDomainSelect([...new Set(domainsForLimits)]);
     if (!labels.length) return;
 
-    // Decide unit + divisor for conversion
     let unit, divisor, yMax;
 
     if (range === 'today') {
       unit = 'Minutes';
-      divisor = 60000; // ms → minutes
-      yMax = maxValue / divisor;     // cap at 24h in minutes
+      divisor = 60000;
+      yMax = maxValue / divisor;
     } else if (maxValue >= 1000 * 60 * 60 * 24) {
       unit = 'Days';
-      divisor = 1000 * 60 * 60 * 24; // ms → days
+      divisor = 1000 * 60 * 60 * 24;
       yMax = maxValue / divisor;
     } else if (maxValue >= 1000 * 60 * 60) {
       unit = 'Hours';
-      divisor = 1000 * 60 * 60; // ms → hours
+      divisor = 1000 * 60 * 60;
       yMax = maxValue / divisor;
     } else {
       unit = 'Minutes';
-      divisor = 60000; // ms → minutes
+      divisor = 60000;
       yMax = maxValue / divisor;
     }
 
-    // Convert all rawData into chosen unit
     const data = rawData.map(ms => +(ms / divisor).toFixed(1));
 
-    // Destroy existing chart if present
     if (chart) chart.destroy();
 
     chart = new Chart(chartCtx, {
@@ -102,10 +97,7 @@ function loadUsageGraph() {
           y: {
             beginAtZero: true,
             max: yMax,
-            title: {
-              display: true,
-              text: unit
-            }
+            title: { display: true, text: unit }
           }
         },
         plugins: {
@@ -117,15 +109,9 @@ function loadUsageGraph() {
                 const hours = Math.floor(minutes / 60);
                 const days = Math.floor(hours / 24);
 
-                if (days >= 1) {
-                  const remHours = hours % 24;
-                  return `${days}d ${remHours}h`;
-                } else if (hours >= 1) {
-                  const remMin = minutes % 60;
-                  return `${hours}h ${remMin}m`;
-                } else {
-                  return `${minutes}m`;
-                }
+                if (days >= 1) return `${days}d ${hours % 24}h`;
+                else if (hours >= 1) return `${hours}h ${minutes % 60}m`;
+                else return `${minutes}m`;
               }
             }
           }
@@ -154,8 +140,8 @@ function populateDomainSelect(domains) {
 
 // ------------------ SET LIMIT ------------------
 document.getElementById("setLimitBtn").onclick = () => {
-  const domain = domainSelect.value.replace(/^www\./, '');
-  const minutes = parseInt(limitMinutes.value);
+  const domain = document.getElementById('domainSelect').value.replace(/^www\./, '');
+  const minutes = parseInt(document.getElementById('limitMinutes').value);
 
   if (!domain || !minutes) return alert("Invalid input");
 
@@ -168,20 +154,18 @@ document.getElementById("setLimitBtn").onclick = () => {
 // ------------------ LOAD LIMITS ------------------
 function loadLimits() {
   chrome.storage.local.get(['siteLimits'], ({ siteLimits = {} }) => {
+    const limitsList = document.getElementById('limitsList');
 
     if (Object.keys(siteLimits).length === 0) {
       limitsList.innerHTML = '<p>No limits set</p>';
       return;
     }
 
-    // Normalize + clean
     const cleaned = {};
     Object.entries(siteLimits).forEach(([domain, minutes]) => {
-      const normalized = domain.replace(/^www\./, '');
-      cleaned[normalized] = minutes;
+      cleaned[domain.replace(/^www\./, '')] = minutes;
     });
 
-    // Persist cleaned limits (IMPORTANT)
     chrome.storage.local.set({ siteLimits: cleaned });
 
     limitsList.innerHTML = Object.entries(cleaned)
@@ -201,43 +185,58 @@ function loadLimits() {
 
 // ------------------ REMOVE LIMIT ------------------
 function removeLimit(domain) {
-  const normalized = domain.replace(/^www\./, '');
-
   chrome.storage.local.get(['siteLimits'], ({ siteLimits = {} }) => {
-    delete siteLimits[normalized];
-
-    chrome.storage.local.set({ siteLimits }, () => {
-      loadLimits();
-    });
+    delete siteLimits[domain.replace(/^www\./, '')];
+    chrome.storage.local.set({ siteLimits }, loadLimits);
   });
 }
 
+// ------------------ BREAK REMINDERS ------------------
+function loadBreakSettings() {
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+    const interval = preferences.breakReminderMinutes || 0;
+    document.getElementById('breakInterval').value = String(interval);
+  });
+}
+
+document.getElementById('saveBreakBtn').onclick = () => {
+  const minutes = parseInt(document.getElementById('breakInterval').value);
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+    preferences.breakReminderMinutes = minutes;
+    chrome.storage.local.set({ preferences }, () => {
+      const status = document.getElementById('status');
+      status.textContent = minutes > 0
+        ? `Break reminder set to every ${minutes} minutes`
+        : 'Break reminders disabled';
+      setTimeout(() => { status.textContent = ''; }, 3000);
+    });
+  });
+};
+
 // ------------------ CSS / ELEMENT BLOCK ------------------
 document.getElementById("saveCssBtn").onclick = () => {
-  const domain = cssDomain.value.trim().replace(/^www\./, '');
-  const rules = cssRules.value.trim();
+  const domain = document.getElementById('cssDomain').value.trim().replace(/^www\./, '');
+  const rules = document.getElementById('cssRules').value.trim();
 
   if (!domain || !rules) return alert("Missing input");
 
   chrome.storage.local.get(["elementBlockRules"], ({ elementBlockRules = {} }) => {
-    elementBlockRules[domain] = rules
-      .split(",")
-      .map(r => r.trim());
-
+    elementBlockRules[domain] = rules.split(",").map(r => r.trim());
     chrome.storage.local.set({ elementBlockRules }, loadCssList);
   });
 };
 
 function loadCssList() {
   chrome.storage.local.get(["elementBlockRules"], ({ elementBlockRules = {} }) => {
+    const cssList = document.getElementById('cssList');
     cssList.innerHTML = Object.entries(elementBlockRules)
       .map(([d, r]) => `<div class="list-item">${d} – ${r.join(", ")}</div>`)
       .join("");
   });
 }
 
-// ------------------ EXPORT ------------------
-exportBtn.onclick = () => {
+// ------------------ JSON EXPORT ------------------
+document.getElementById('exportBtn').onclick = () => {
   chrome.storage.local.get(null, data => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -245,13 +244,73 @@ exportBtn.onclick = () => {
     a.href = url;
     a.download = `tabtamer-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
+    URL.revokeObjectURL(url);
+  });
+};
+
+// ------------------ CSV EXPORT ------------------
+document.getElementById('csvExportBtn').onclick = () => {
+  chrome.storage.local.get(['sites'], ({ sites = {} }) => {
+    if (Object.keys(sites).length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    // Collect all unique dates
+    const allDates = new Set();
+    Object.values(sites).forEach(info => {
+      Object.keys(info.dailyTime || {}).forEach(date => allDates.add(date));
+    });
+
+    const sortedDates = [...allDates].sort();
+    const domains = Object.keys(sites).sort();
+
+    // CSV header
+    const header = ['Domain', 'Total (minutes)', ...sortedDates.map(d => d)];
+    const rows = [header.join(',')];
+
+    // CSV rows
+    domains.forEach(domain => {
+      const info = sites[domain];
+      const totalMinutes = Math.round((info.totalTime || 0) / 60000);
+      const dailyValues = sortedDates.map(date => {
+        return Math.round((info.dailyTime?.[date] || 0) / 60000);
+      });
+      rows.push([
+        `"${domain}"`,
+        totalMinutes,
+        ...dailyValues
+      ].join(','));
+    });
+
+    // Total row
+    const totals = sortedDates.map(date => {
+      let total = 0;
+      Object.values(sites).forEach(info => {
+        total += info.dailyTime?.[date] || 0;
+      });
+      return Math.round(total / 60000);
+    });
+    const grandTotal = Math.round(
+      Object.values(sites).reduce((sum, info) => sum + (info.totalTime || 0), 0) / 60000
+    );
+    rows.push(['TOTAL', grandTotal, ...totals].join(','));
+
+    const csv = rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tabtamer-data-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   });
 };
 
 // ------------------ IMPORT ------------------
-importBtn.onclick = () => importFile.click();
+document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
 
-importFile.onchange = e => {
+document.getElementById('importFile').onchange = e => {
   const file = e.target.files[0];
   if (!file) return;
 
@@ -262,25 +321,20 @@ importFile.onchange = e => {
 
     try {
       data = JSON.parse(reader.result);
-    } catch (err) {
+    } catch {
       alert("Invalid backup file");
       return;
     }
 
-    // Validate expected structure
     const safeData = {
       sites: data.sites || {},
       siteLimits: data.siteLimits || {},
       elementBlockRules: data.elementBlockRules || {},
-      preferences: data.preferences || {
-        darkMode: false,
-        audioTracking: true
-      },
-      limitWarningsSent: {} // reset warnings safely
+      preferences: data.preferences || { darkMode: false, audioTracking: true },
+      limitWarningsSent: {}
     };
 
     chrome.storage.local.set(safeData, () => {
-      // Notify background to reload in-memory state
       chrome.runtime.sendMessage({ action: 'reloadFromStorage' }, () => {
         loadAll();
         alert("Backup restored successfully");
@@ -296,6 +350,7 @@ function loadAll() {
   loadUsageGraph();
   loadLimits();
   loadCssList();
+  loadBreakSettings();
 }
 
 loadAll();

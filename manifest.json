@@ -10,8 +10,19 @@
     "notifications",
     "activeTab",
     "alarms",
-    "scripting"
+    "scripting",
+    "contextMenus"
   ],
+  "commands": {
+    "toggle-focus-mode": {
+      "suggested_key": { "default": "Alt+F" },
+      "description": "Toggle Focus Mode"
+    },
+    "start-element-picker": {
+      "suggested_key": { "default": "Alt+P" },
+      "description": "Start Element Picker"
+    }
+  },
   "background": {
     "service_worker": "src/background.js",
     "type": "module"

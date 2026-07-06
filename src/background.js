@@ -108,6 +108,163 @@ function cleanupOldWarnings() {
   });
 }
 
+// ==================== SITE CATEGORIES ====================
+const SITE_CATEGORIES = {
+  social: ['facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'tiktok.com', 'snapchat.com', 'reddit.com', 'linkedin.com', 'pinterest.com', 'tumblr.com', 'discord.com', 'threads.net', 'mastodon.social'],
+  entertainment: ['youtube.com', 'netflix.com', 'twitch.tv', 'hulu.com', 'disneyplus.com', 'spotify.com', 'soundcloud.com', 'primevideo.com', 'crunchyroll.com', 'vimeo.com'],
+  news: ['cnn.com', 'bbc.com', 'bbc.co.uk', 'nytimes.com', 'foxnews.com', 'reuters.com', 'apnews.com', 'theguardian.com', 'washingtonpost.com'],
+  work: ['dev.azure.com', 'github.com', 'gitlab.com', 'bitbucket.org', 'stackoverflow.com', 'docs.google.com', 'drive.google.com', 'notion.so', 'slack.com', 'trello.com', 'jira.atlassian.com', 'confluence.atlassian.com', 'figma.com', 'linear.app', 'vercel.com', 'netlify.com'],
+  shopping: ['amazon.com', 'amazon.in', 'ebay.com', 'walmart.com', 'etsy.com', 'aliexpress.com', 'flipkart.com', 'myntra.com']
+};
+
+function domainMatchesPattern(domain, pattern) {
+  // Wildcard subdomain: *.corestack.io → matches anything.corestack.io
+  if (pattern.startsWith('*.')) {
+    const suffix = pattern.slice(2);
+    return domain === suffix || domain.endsWith('.' + suffix);
+  }
+  // Wildcard port: localhost:* → matches "localhost" (port is stripped by getDomain)
+  if (pattern.endsWith(':*')) {
+    const base = pattern.slice(0, -2);
+    return domain === base;
+  }
+  return domain === pattern || domain.endsWith('.' + pattern);
+}
+
+function getCategoryForDomain(domain) {
+  for (const [category, domains] of Object.entries(SITE_CATEGORIES)) {
+    if (domains.some(pattern => domainMatchesPattern(domain, pattern))) {
+      return category;
+    }
+  }
+  return 'other';
+}
+
+// ==================== FOCUS MODE ====================
+let focusState = {
+  active: false,
+  endTime: null,
+  duration: 0,
+  blockedDomains: []
+};
+
+function startFocusMode(durationMinutes, blockedCategories = ['social', 'entertainment', 'shopping']) {
+  const endTime = Date.now() + durationMinutes * 60000;
+  focusState = {
+    active: true,
+    endTime,
+    duration: durationMinutes,
+    blockedDomains: blockedCategories
+  };
+  chrome.storage.local.set({ focusState });
+  chrome.alarms.create('focusModeEnd', { delayInMinutes: durationMinutes });
+
+  chrome.notifications.create('focus-start', {
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('assets/icons/icon48.png'),
+    title: 'TabTamer – Focus Mode',
+    message: `Focus mode started for ${durationMinutes} minutes. Distracting sites are blocked.`
+  });
+}
+
+function stopFocusMode() {
+  focusState = { active: false, endTime: null, duration: 0, blockedDomains: [] };
+  chrome.storage.local.set({ focusState });
+  chrome.alarms.clear('focusModeEnd');
+
+  chrome.notifications.create('focus-end', {
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('assets/icons/icon48.png'),
+    title: 'TabTamer – Focus Mode Ended',
+    message: 'Focus session complete! Great work.'
+  });
+}
+
+function isFocusBlocked(domain) {
+  if (!focusState.active) return false;
+  if (Date.now() > focusState.endTime) {
+    stopFocusMode();
+    return false;
+  }
+  const category = getCategoryForDomain(domain);
+  return focusState.blockedDomains.includes(category);
+}
+
+// ==================== BREAK REMINDERS ====================
+let continuousBrowsingStart = Date.now();
+
+function checkBreakReminder() {
+  if (!sessionData.isWindowFocused) return;
+
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+    const breakInterval = preferences.breakReminderMinutes || 0;
+    if (!breakInterval) return;
+
+    const elapsed = (Date.now() - continuousBrowsingStart) / 60000;
+    if (elapsed >= breakInterval) {
+      // Reset timer for next reminder cycle
+      continuousBrowsingStart = Date.now();
+
+      chrome.notifications.create('break-reminder-' + Date.now(), {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('assets/icons/icon48.png'),
+        title: 'TabTamer – Take a Break!',
+        message: `You've been browsing for ${Math.round(elapsed)} minutes. Time to stretch!`
+      });
+
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'showToast',
+            message: `You've been browsing for ${Math.round(elapsed)} min. Take a break!`
+          }).catch(() => {});
+        }
+      });
+    }
+  });
+}
+
+// ==================== CONTEXT MENU ====================
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'blockElement' && tab?.id) {
+    chrome.tabs.sendMessage(tab.id, { action: 'START_ELEMENT_PICKER' }).catch(() => {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['src/content/contentScript.js']
+      }).then(() => {
+        setTimeout(() => {
+          chrome.tabs.sendMessage(tab.id, { action: 'START_ELEMENT_PICKER' }).catch(() => {});
+        }, 200);
+      }).catch(() => {});
+    });
+  }
+});
+
+// ==================== KEYBOARD SHORTCUTS ====================
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'toggle-focus-mode') {
+    if (focusState.active) {
+      stopFocusMode();
+    } else {
+      startFocusMode(25);
+    }
+  } else if (command === 'start-element-picker') {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id && tab.url && isValidHttpUrl(tab.url)) {
+      chrome.tabs.sendMessage(tab.id, { action: 'START_ELEMENT_PICKER' }).catch(() => {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['src/content/contentScript.js']
+        }).then(() => {
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tab.id, { action: 'START_ELEMENT_PICKER' }).catch(() => {});
+          }, 200);
+        }).catch(() => {});
+      });
+    }
+  }
+});
+
 // Save element selector in background.js - Updated for multiple elements
 let pendingElementBlocks = []; // Array to store multiple elements
 let currentBlockTabId = null;
@@ -317,6 +474,16 @@ function updateTime() {
       }
       site.dailyTime[dateKey] += elapsed;
 
+      // -------- FOCUS MODE CHECK --------
+      if (isFocusBlocked(domain)) {
+        chrome.tabs.update(tabId, {
+          url: chrome.runtime.getURL(
+            `pages/blocked.html?domain=${encodeURIComponent(domain)}&reason=focus`
+          )
+        });
+        return;
+      }
+
       // -------- LIMIT WARNING + ENFORCEMENT (single read) --------
       chrome.storage.local.get(
         ['siteLimits', 'limitWarningsSent'],
@@ -386,6 +553,7 @@ function updateTime() {
   });
 
   persistSites();
+  checkBreakReminder();
 }
 
 // Start the update timer
@@ -413,6 +581,8 @@ chrome.alarms.create('dailyResetBlockedTabs', {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'dailyResetBlockedTabs') {
     resetBlockedTabs();
+  } else if (alarm.name === 'focusModeEnd') {
+    stopFocusMode();
   }
 });
 
@@ -458,6 +628,11 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
   sessionData.isWindowFocused = windowId !== chrome.windows.WINDOW_ID_NONE;
   sessionData.lastUpdateTime = Date.now();
 
+  // Reset break timer when browser regains focus (returning from alt-tab)
+  if (sessionData.isWindowFocused) {
+    continuousBrowsingStart = Date.now();
+  }
+
   if (sessionData.isWindowFocused) {
     // Get the active tab in the focused window
     chrome.tabs.query({ active: true, windowId: windowId }, (tabs) => {
@@ -471,13 +646,30 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 // Handle messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getSessionData') {
-    // Update time before sending data
     updateTime();
 
+    // Add category info to each site
+    const sitesWithCategories = {};
+    for (const [domain, data] of Object.entries(sessionData.sites)) {
+      sitesWithCategories[domain] = { ...data, category: getCategoryForDomain(domain) };
+    }
+
     sendResponse({
-      sites: sessionData.sites,
-      trackAudioEnabled: sessionData.trackAudioEnabled
+      sites: sitesWithCategories,
+      trackAudioEnabled: sessionData.trackAudioEnabled,
+      focusState
     });
+  } else if (request.action === 'startFocusMode') {
+    startFocusMode(request.duration, request.blockedCategories);
+    sendResponse({ success: true, focusState });
+  } else if (request.action === 'stopFocusMode') {
+    stopFocusMode();
+    sendResponse({ success: true, focusState });
+  } else if (request.action === 'getFocusState') {
+    if (focusState.active && Date.now() > focusState.endTime) {
+      stopFocusMode();
+    }
+    sendResponse({ focusState });
   } else if (request.action === 'toggleAudioTracking') {
     sessionData.trackAudioEnabled = request.enabled;
 
@@ -510,6 +702,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Initialize on install
 chrome.runtime.onInstalled.addListener(async () => {
+  // Create context menu
+  chrome.contextMenus.create({
+    id: 'blockElement',
+    title: 'Block this element',
+    contexts: ['all'],
+    documentUrlPatterns: ['http://*/*', 'https://*/*']
+  });
+
   // Load stored session data
   const stored = await chrome.storage.local.get(['sites']);
   if (stored.sites) {

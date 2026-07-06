@@ -13,13 +13,47 @@
     <header>
       <h1>TabTamer</h1>
       <div class="header-actions">
-        <button id="blockElementBtn" class="icon-btn" title="Block Element">⛶</button>
+        <button id="focusModeBtn" class="icon-btn" title="Focus Mode (Alt+F)">🎯</button>
+        <button id="blockElementBtn" class="icon-btn" title="Block Element (Alt+P)">⛶</button>
         <button id="videoSpeedBtn" class="icon-btn" title="Video Speed Controller">🎬</button>
         <button id="darkModeToggle" class="icon-btn" title="Toggle Dark Mode">⏾</button>
         <button id="audioToggle" class="icon-btn" title="Track Audio Tabs">🔇</button>
         <button id="settingsBtn" class="icon-btn" title="Settings">⚙️</button>
       </div>
     </header>
+
+    <!-- Focus Mode Banner -->
+    <div id="focusBanner" class="focus-banner" style="display:none;">
+      <div class="focus-banner-content">
+        <span class="focus-icon">🎯</span>
+        <div class="focus-info">
+          <div class="focus-label">Focus Mode Active</div>
+          <div class="focus-timer" id="focusTimer">00:00</div>
+        </div>
+        <button id="stopFocusBtn" class="focus-stop-btn">Stop</button>
+      </div>
+    </div>
+
+    <!-- Focus Mode Setup Panel -->
+    <div id="focusPanel" class="focus-panel" style="display:none;">
+      <div class="focus-panel-title">Start Focus Session</div>
+      <div class="focus-presets">
+        <button class="focus-preset-btn" data-minutes="25">25m</button>
+        <button class="focus-preset-btn" data-minutes="50">50m</button>
+        <button class="focus-preset-btn active" data-minutes="90">90m</button>
+        <button class="focus-preset-btn" data-minutes="120">2h</button>
+      </div>
+      <div class="focus-categories">
+        <label class="focus-cat-label"><input type="checkbox" value="social" checked> Social</label>
+        <label class="focus-cat-label"><input type="checkbox" value="entertainment" checked> Entertainment</label>
+        <label class="focus-cat-label"><input type="checkbox" value="shopping" checked> Shopping</label>
+        <label class="focus-cat-label"><input type="checkbox" value="news"> News</label>
+      </div>
+      <div class="focus-panel-buttons">
+        <button id="startFocusBtn" class="btn-focus-start">Start Focus</button>
+        <button id="cancelFocusBtn" class="btn-focus-cancel">Cancel</button>
+      </div>
+    </div>
 
     <nav class="tabs">
       <button class="tab-btn active" data-tab="today">Today</button>
@@ -34,7 +68,29 @@
             <div class="stat-label">Total Time Today</div>
             <div class="stat-value" id="todayTotal">0m</div>
           </div>
+          <div class="stat-card productivity-card">
+            <div class="stat-label">Productivity Score</div>
+            <div class="productivity-row">
+              <div class="stat-value" id="productivityScore">--</div>
+              <div class="productivity-bar-container">
+                <div class="productivity-bar" id="productivityBar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- Comparison Stats -->
+        <div class="comparison-stats" id="comparisonStats">
+          <div class="comparison-item">
+            <span class="comparison-label">vs Yesterday</span>
+            <span class="comparison-value" id="vsYesterday">--</span>
+          </div>
+          <div class="comparison-item">
+            <span class="comparison-label">vs Last Week Avg</span>
+            <span class="comparison-value" id="vsLastWeek">--</span>
+          </div>
+        </div>
+
         <div class="top-sites">
           <h3>Top Sites Today</h3>
           <div id="todaySites" class="sites-list"></div>
