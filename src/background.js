@@ -49,8 +49,18 @@ function initializeSite(domain) {
   return sessionData.sites[domain];
 }
 
-// blocked Tabs set
-const blockedTabs = new Set();
+// blocked Tabs set — persisted to survive service worker restarts
+let blockedTabs = new Set();
+
+function persistBlockedTabs() {
+  chrome.storage.local.set({ blockedTabs: [...blockedTabs] });
+}
+
+function restoreBlockedTabs() {
+  chrome.storage.local.get(['blockedTabs'], ({ blockedTabs: stored = [] }) => {
+    blockedTabs = new Set(stored);
+  });
+}
 
 // Get domain from URL
 function getDomain(url) {
@@ -185,8 +195,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
           chrome.storage.local.set({ elementBlockRules }, () => {
             console.log(`${pendingElementBlocks.length} elements blocked on ${currentBlockDomain}`);
 
-            // Show success notification
-            showNotification(`block-success-${Date.now()}`, {
+            chrome.notifications.create(`block-success-${Date.now()}`, {
               type: 'basic',
               iconUrl: chrome.runtime.getURL('assets/icons/icon128.png'),
               title: 'TabTamer – Elements Blocked',
@@ -273,7 +282,6 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
 
 // Update time for active tabs
 function updateTime() {
-  persistSites();
   const now = Date.now();
   const elapsed = now - sessionData.lastUpdateTime;
   sessionData.lastUpdateTime = now;
@@ -309,7 +317,7 @@ function updateTime() {
       }
       site.dailyTime[dateKey] += elapsed;
 
-      // -------- LIMIT WARNING CHECK --------
+      // -------- LIMIT WARNING + ENFORCEMENT (single read) --------
       chrome.storage.local.get(
         ['siteLimits', 'limitWarningsSent'],
         ({ siteLimits = {}, limitWarningsSent = {} }) => {
@@ -322,14 +330,12 @@ function updateTime() {
           const remainingMs = limitMs - usedMs;
           const remainingMinutes = Math.ceil(remainingMs / 60000);
 
-          // 🔹 unique key per minute-warning
           const warningKey = `${domain}_${getDateKey()}_${remainingMinutes}`;
 
           if (
             (remainingMinutes <= 5 && remainingMinutes > 4 || remainingMinutes <= 2 && remainingMinutes > 1) &&
             !limitWarningsSent[warningKey]
           ) {
-            // OS notification
             chrome.notifications.create(
               `limit-${domain}-${Date.now()}`,
               {
@@ -340,7 +346,6 @@ function updateTime() {
               }
             );
 
-            // In-page toast (active tab only)
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
               if (tabs[0]) {
                 chrome.tabs.sendMessage(tabs[0].id, {
@@ -353,22 +358,11 @@ function updateTime() {
             limitWarningsSent[warningKey] = true;
             chrome.storage.local.set({ limitWarningsSent });
           }
-        }
-      );
 
-
-      // -------- LIMIT ENFORCEMENT --------
-      chrome.storage.local.get(['siteLimits'], ({ siteLimits = {} }) => {
-        const limitMinutes = siteLimits[domain];
-        if (!limitMinutes) return;
-
-        const limitMs = limitMinutes * 60000;
-        const usedMs = site.dailyTime[dateKey];
-
-        if (usedMs >= limitMs) {
-          // Already blocked this tab?
-          if (!blockedTabs.has(tabId)) {
+          // Enforcement
+          if (usedMs >= limitMs && !blockedTabs.has(tabId)) {
             blockedTabs.add(tabId);
+            persistBlockedTabs();
 
             chrome.tabs.update(tabId, {
               url: chrome.runtime.getURL(
@@ -387,9 +381,11 @@ function updateTime() {
             );
           }
         }
-      });
+      );
     });
   });
+
+  persistSites();
 }
 
 // Start the update timer
@@ -402,9 +398,17 @@ function startTimer() {
 
 function resetBlockedTabs() {
   blockedTabs.clear();
+  persistBlockedTabs();
 }
 
-chrome.alarms.create('dailyResetBlockedTabs', { periodInMinutes: 1440 });
+// Align daily reset to next midnight
+const now = new Date();
+const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+const delayToMidnight = (nextMidnight - now) / 60000;
+chrome.alarms.create('dailyResetBlockedTabs', {
+  delayInMinutes: delayToMidnight,
+  periodInMinutes: 1440
+});
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'dailyResetBlockedTabs') {
@@ -532,12 +536,14 @@ chrome.runtime.onInstalled.addListener(async () => {
     sessionData.trackAudioEnabled = preferences.audioTracking ?? true;
   }
   cleanupOldWarnings();
+  restoreBlockedTabs();
   startTimer();
 });
 
 // Start timer on service worker activation
 chrome.runtime.onStartup.addListener(async () => {
   cleanupOldWarnings();
+  restoreBlockedTabs();
   const { sites = {}, preferences = {} } =
     await chrome.storage.local.get(['sites', 'preferences']);
 

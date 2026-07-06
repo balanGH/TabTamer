@@ -354,15 +354,12 @@ if (window.tabTamerInitialized) {
 
     function updateFinishButton(count) {
         const button = document.getElementById('tabtamer-finish-button');
-        if (button) {
-            const countSpan = document.getElementById('finish-count');
-            if (countSpan) countSpan.textContent = count;
+        if (!button) return;
 
-            if (count === 0) {
-                button.innerHTML = '❌ Cancel <span class="count" id="finish-count">0</span>';
-            } else {
-                button.innerHTML = '✅ Block Selected <span class="count" id="finish-count">' + count + '</span>';
-            }
+        if (count === 0) {
+            button.innerHTML = '❌ Cancel <span class="count" id="finish-count">0</span>';
+        } else {
+            button.innerHTML = '✅ Block Selected <span class="count" id="finish-count">' + count + '</span>';
         }
     }
 
@@ -421,38 +418,69 @@ if (window.tabTamerInitialized) {
             overlay.id = 'tabtamer-confirm-overlay';
             overlay.className = `tabtamer-confirm-overlay ${isDark ? 'dark' : ''}`;
 
-            // Create selector list HTML
-            const selectorItems = selectors.map((selector, index) => {
-                const truncated = selector.length > 40 ? selector.substring(0, 40) + '...' : selector;
-                return `
-                    <div class="tabtamer-selector-item">
-                        <input type="checkbox" class="tabtamer-selector-checkbox" data-selector="${selector}" data-index="${index}" checked>
-                        <span class="tabtamer-selector-text" title="${selector}">${truncated}</span>
-                    </div>
-                `;
-            }).join('');
+            // Build overlay with safe DOM (no innerHTML with user data)
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'tabtamer-confirm-title';
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = `🔒 Block Elements on ${domain}`;
+            const badge = document.createElement('span');
+            badge.className = 'tabtamer-badge';
+            badge.textContent = count;
+            titleDiv.appendChild(titleSpan);
+            titleDiv.appendChild(badge);
 
-            overlay.innerHTML = `
-                <div class="tabtamer-confirm-title">
-                    <span>🔒 Block Elements on ${domain}</span>
-                    <span class="tabtamer-badge">${count}</span>
-                </div>
-                <div class="tabtamer-selector-list" id="tabtamer-selector-list">
-                    ${selectorItems}
-                </div>
-                <div class="tabtamer-confirm-buttons">
-                    <button class="tabtamer-btn-block" id="tabtamerConfirmBlock">Block Selected (${count})</button>
-                    <button class="tabtamer-btn-cancel ${isDark ? 'dark' : ''}" id="tabtamerConfirmCancel">Cancel All</button>
-                </div>
-                <div class="tabtamer-help-text">Uncheck any elements you don't want to block</div>
-            `;
+            const selectorList = document.createElement('div');
+            selectorList.className = 'tabtamer-selector-list';
+            selectorList.id = 'tabtamer-selector-list';
+
+            selectors.forEach((selector, index) => {
+                const item = document.createElement('div');
+                item.className = 'tabtamer-selector-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'tabtamer-selector-checkbox';
+                checkbox.dataset.selector = selector;
+                checkbox.dataset.index = index;
+                checkbox.checked = true;
+
+                const text = document.createElement('span');
+                text.className = 'tabtamer-selector-text';
+                text.title = selector;
+                text.textContent = selector.length > 40 ? selector.substring(0, 40) + '...' : selector;
+
+                item.appendChild(checkbox);
+                item.appendChild(text);
+                selectorList.appendChild(item);
+            });
+
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'tabtamer-confirm-buttons';
+            const blockBtn = document.createElement('button');
+            blockBtn.className = 'tabtamer-btn-block';
+            blockBtn.id = 'tabtamerConfirmBlock';
+            blockBtn.textContent = `Block Selected (${count})`;
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = `tabtamer-btn-cancel ${isDark ? 'dark' : ''}`;
+            cancelBtn.id = 'tabtamerConfirmCancel';
+            cancelBtn.textContent = 'Cancel All';
+            buttonsDiv.appendChild(blockBtn);
+            buttonsDiv.appendChild(cancelBtn);
+
+            const helpText = document.createElement('div');
+            helpText.className = 'tabtamer-help-text';
+            helpText.textContent = 'Uncheck any elements you don\'t want to block';
+
+            overlay.appendChild(titleDiv);
+            overlay.appendChild(selectorList);
+            overlay.appendChild(buttonsDiv);
+            overlay.appendChild(helpText);
 
             document.body.appendChild(overlay);
 
             // Handle checkbox changes
             document.querySelectorAll('.tabtamer-selector-checkbox').forEach(checkbox => {
                 checkbox.addEventListener('change', (e) => {
-                    e.preventDefault();
                     e.stopPropagation();
 
                     const selector = e.target.dataset.selector;
@@ -761,11 +789,10 @@ if (window.tabTamerInitialized) {
                 }
             }
 
-            const siblings = [...current.parentNode.children].filter(child =>
-                child.nodeType === 1 && child.tagName === current.tagName
-            );
-            if (siblings.length > 1) {
-                const index = siblings.indexOf(current) + 1;
+            const allChildren = [...current.parentNode.children];
+            const sameTagSiblings = allChildren.filter(c => c.tagName === current.tagName);
+            if (sameTagSiblings.length > 1) {
+                const index = allChildren.indexOf(current) + 1;
                 sel += `:nth-child(${index})`;
             }
 
@@ -777,19 +804,7 @@ if (window.tabTamerInitialized) {
         return path.join(' > ');
     }
 
-    // auto-apply saved rules
-    chrome.storage.local.get(["elementBlockRules"], ({ elementBlockRules = {} }) => {
-        const domain = location.hostname.replace(/^www\./, "");
-        (elementBlockRules[domain] || []).forEach(sel => {
-            try {
-                document.querySelectorAll(sel).forEach(el => {
-                    el.style.display = "none";
-                });
-            } catch (error) {
-                console.warn(`Invalid selector for ${domain}: ${sel}`, error);
-            }
-        });
-    });
+    // auto-apply is handled by contentBlocker.js — no duplicate here
 
     // Clean up on page unload
     window.addEventListener('beforeunload', () => {

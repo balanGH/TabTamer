@@ -187,17 +187,6 @@ function initVideoController(video) {
     window.addEventListener('scroll', updatePosition, { passive: true });
     window.addEventListener('resize', updatePosition, { passive: true });
 
-    // Clean up on video removal
-    const observer = new MutationObserver((mutations) => {
-        if (!document.body.contains(video)) {
-            if (controller.parentNode) controller.remove();
-            videoState.videos.delete(video);
-            videoState.speeds.delete(video);
-            observer.disconnect();
-        }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
 }
 
 // Position controller relative to video
@@ -318,11 +307,20 @@ function saveSpeedPreference(speed) {
     });
 }
 
+function cleanupVideoController(video) {
+    const controller = videoState.videos.get(video);
+    if (controller && controller.parentNode) {
+        controller.remove();
+    }
+    videoState.videos.delete(video);
+    videoState.speeds.delete(video);
+}
+
 // Initialize for existing and new videos
 function initVideoControllers() {
     document.querySelectorAll('video').forEach(initVideoController);
 
-    // Watch for new videos being added
+    // Watch for new videos and clean up removed ones (single shared observer)
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             mutation.addedNodes.forEach((node) => {
@@ -330,6 +328,14 @@ function initVideoControllers() {
                     initVideoController(node);
                 } else if (node.querySelectorAll) {
                     node.querySelectorAll('video').forEach(initVideoController);
+                }
+            });
+
+            mutation.removedNodes.forEach((node) => {
+                if (node.nodeName === 'VIDEO') {
+                    cleanupVideoController(node);
+                } else if (node.querySelectorAll) {
+                    node.querySelectorAll('video').forEach(cleanupVideoController);
                 }
             });
         });

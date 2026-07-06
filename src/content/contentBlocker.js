@@ -1,12 +1,16 @@
 // Get current domain
 const domain = location.hostname.replace(/^www\./, '');
 
-// Remove elements by selector list
-function removeBlockedElements(selectors) {
+// Hide elements by selector list (display:none, not remove, so they can be restored)
+function hideBlockedElements(selectors) {
     selectors.forEach(selector => {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach(el => el.remove());
-        console.log(`Removed ${elements.length} elements for selector:`, selector);
+        try {
+            document.querySelectorAll(selector).forEach(el => {
+                el.style.display = 'none';
+            });
+        } catch (e) {
+            console.warn(`Invalid selector: ${selector}`, e);
+        }
     });
 }
 
@@ -16,11 +20,18 @@ chrome.storage.local.get(['elementBlockRules'], ({ elementBlockRules = {} }) => 
     if (!rules || !rules.length) return;
 
     // Run once
-    removeBlockedElements(rules);
+    hideBlockedElements(rules);
 
-    // Observe dynamic changes (YouTube, SPA sites)
+    // Observe dynamic changes with debounce via requestAnimationFrame
+    let rafPending = false;
     const observer = new MutationObserver(() => {
-        removeBlockedElements(rules);
+        if (!rafPending) {
+            rafPending = true;
+            requestAnimationFrame(() => {
+                hideBlockedElements(rules);
+                rafPending = false;
+            });
+        }
     });
 
     observer.observe(document.documentElement, {

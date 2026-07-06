@@ -296,7 +296,6 @@ function loadAll() {
   loadUsageGraph();
   loadLimits();
   loadCssList();
-  loadVideoSpeedSettings();
 }
 
 loadAll();

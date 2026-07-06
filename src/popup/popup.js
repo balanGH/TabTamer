@@ -145,26 +145,6 @@ chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
     btn.title = enabled ? 'Video Speed Controller (On)' : 'Video Speed Controller (Off)';
   }
 });
-// Load initial state
-chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
-  const enabled = preferences.videoControlEnabled ?? true;
-  const btn = document.getElementById('videoSpeedBtn');
-  btn.style.opacity = enabled ? '1' : '0.5';
-  btn.title = enabled ? 'Video Speed Controller (On)' : 'Video Speed Controller (Off)';
-});
-
-// Dark Mode Toggle
-document.getElementById('darkModeToggle').addEventListener('click', () => {
-  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
-    preferences.darkMode = !preferences.darkMode;
-
-    chrome.storage.local.set({ preferences }, () => {
-      document.body.classList.toggle('dark', preferences.darkMode);
-      document.getElementById('darkModeToggle').textContent =
-        preferences.darkMode ? '☀' : '⏾';
-    });
-  });
-});
 
 // Audio Tracking Toggle
 document.getElementById('audioToggle').addEventListener('click', () => {
@@ -319,15 +299,11 @@ function cleanupCharts() {
   }
 }
 
-// Create week chart
+// Create or update week chart
 function createWeekChart(sites) {
   const ctx = document.getElementById('weekChart');
   if (!ctx) return;
 
-  // Cleanup existing charts
-  cleanupCharts();
-
-  // Prepare data for last 7 days (Mon-Sun)
   const labels = [];
   const data = [];
 
@@ -336,22 +312,21 @@ function createWeekChart(sites) {
     const dayName = getDayName(dateKey);
     labels.push(dayName);
 
-    // Sum time for all sites on this day
     let totalTime = 0;
     sites.forEach(site => {
       totalTime += site.dailyTime[dateKey] || 0;
     });
 
-    // Convert to minutes
     data.push(Math.round(totalTime / 60000));
   }
 
-  // Destroy existing chart
   if (weekChart) {
-    weekChart.destroy();
+    weekChart.data.labels = labels;
+    weekChart.data.datasets[0].data = data;
+    weekChart.update('none');
+    return;
   }
 
-  // Create new chart
   weekChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -392,12 +367,11 @@ function createWeekChart(sites) {
   });
 }
 
-// Create month chart
+// Create or update month chart
 function createMonthChart(sites) {
   const ctx = document.getElementById('monthChart');
   if (!ctx) return;
 
-  // Prepare data for last 30 days
   const labels = [];
   const data = [];
 
@@ -406,22 +380,21 @@ function createMonthChart(sites) {
     const shortDate = getShortDate(dateKey);
     labels.push(shortDate);
 
-    // Sum time for all sites on this day
     let totalTime = 0;
     sites.forEach(site => {
       totalTime += site.dailyTime[dateKey] || 0;
     });
 
-    // Convert to minutes
     data.push(Math.round(totalTime / 60000));
   }
 
-  // Destroy existing chart
   if (monthChart) {
-    monthChart.destroy();
+    monthChart.data.labels = labels;
+    monthChart.data.datasets[0].data = data;
+    monthChart.update('none');
+    return;
   }
 
-  // Create new chart
   monthChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -586,5 +559,5 @@ port.onDisconnect.addListener(() => {
 // Load data on popup open
 loadData();
 
-// Refresh data every x seconds
-setInterval(loadData, 1000);
+// Refresh data every 5 seconds
+setInterval(loadData, 5000);
