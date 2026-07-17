@@ -1,6 +1,3 @@
-// Popup script for Session ( Time Tracker )
-// Handles UI updates and communication with background service worker
-
 let weekChart = null;
 let monthChart = null;
 let focusTimerInterval = null;
@@ -15,7 +12,7 @@ chrome.storage.local.get(['preferences'], ({ preferences }) => {
 
   document.body.classList.toggle('dark', prefs.darkMode);
   document.getElementById('darkModeToggle').textContent =
-    prefs.darkMode ? '☀' : '⏾';
+    prefs.darkMode ? '☀' : '☾';
 
   document.getElementById('audioToggle').textContent =
     prefs.audioTracking ? '🔊' : '🔇';
@@ -27,14 +24,12 @@ let focusPanelOpen = false;
 document.getElementById('focusModeBtn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'getFocusState' }, (response) => {
     if (response?.focusState?.active) {
-      // Already active — toggle stop
       if (confirm('Stop Focus Mode?')) {
         chrome.runtime.sendMessage({ action: 'stopFocusMode' }, () => {
           updateFocusUI({ active: false });
         });
       }
     } else {
-      // Show setup panel
       const panel = document.getElementById('focusPanel');
       focusPanelOpen = !focusPanelOpen;
       panel.style.display = focusPanelOpen ? 'block' : 'none';
@@ -42,7 +37,6 @@ document.getElementById('focusModeBtn').addEventListener('click', () => {
   });
 });
 
-// Focus preset buttons
 document.querySelectorAll('.focus-preset-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.focus-preset-btn').forEach(b => b.classList.remove('active'));
@@ -50,7 +44,6 @@ document.querySelectorAll('.focus-preset-btn').forEach(btn => {
   });
 });
 
-// Start Focus
 document.getElementById('startFocusBtn').addEventListener('click', () => {
   const activePreset = document.querySelector('.focus-preset-btn.active');
   const duration = parseInt(activePreset?.dataset.minutes || '25');
@@ -90,9 +83,9 @@ function updateFocusUI(focusState) {
   if (focusState?.active) {
     banner.style.display = 'block';
     btn.style.opacity = '1';
-    btn.style.background = '#667eea';
+    btn.style.background = '#6366f1';
     btn.style.color = 'white';
-    btn.style.borderColor = '#667eea';
+    btn.style.borderColor = '#6366f1';
     startFocusTimer(focusState.endTime);
   } else {
     banner.style.display = 'none';
@@ -199,7 +192,6 @@ document.getElementById('videoSpeedBtn').addEventListener('click', () => {
   });
 });
 
-// Load initial video controller state
 chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
   const enabled = preferences.videoControlEnabled ?? true;
   const btn = document.getElementById('videoSpeedBtn');
@@ -245,6 +237,13 @@ function formatTime(ms) {
   }
 }
 
+function formatTimeShort(ms) {
+  const minutes = Math.floor(ms / 60000);
+  const hours = Math.floor(minutes / 60);
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  return `${minutes}m`;
+}
+
 function getDateKey(daysAgo = 0) {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
@@ -285,8 +284,6 @@ function calculateProductivityScore(sites, dateKey) {
 
   if (totalMs === 0) return null;
 
-  // Score: 100 if all productive, 0 if all distracting
-  // neutral sites contribute 50/100
   const neutralMs = totalMs - productiveMs - distractingMs;
   const score = Math.round(
     ((productiveMs * 100 + neutralMs * 50) / totalMs)
@@ -362,6 +359,186 @@ function updateComparisonStats(sites) {
   }
 }
 
+// ==================== CATEGORY BREAKDOWN ====================
+const CAT_COLORS = {
+  work: '#22c55e',
+  study: '#f59e0b',
+  social: '#3b82f6',
+  entertainment: '#ec4899',
+  news: '#f97316',
+  shopping: '#a855f7',
+  other: '#94a3b8'
+};
+
+function updateCategoryBreakdown(sites, dateKey) {
+  const container = document.getElementById('categoryBars');
+  const catTotals = {};
+
+  sites.forEach(site => {
+    const time = site.dailyTime[dateKey] || 0;
+    if (time <= 0) return;
+    const cat = site.category || 'other';
+    catTotals[cat] = (catTotals[cat] || 0) + time;
+  });
+
+  const entries = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="category-empty">No data yet</div>';
+    return;
+  }
+
+  const maxTime = entries[0][1];
+
+  container.innerHTML = entries.map(([cat, ms]) => {
+    const pct = Math.round((ms / maxTime) * 100);
+    const color = CAT_COLORS[cat] || CAT_COLORS.other;
+    return `
+      <div class="cat-row">
+        <span class="cat-row-label">${cat}</span>
+        <div class="cat-row-bar-wrap">
+          <div class="cat-row-bar cat-color-${cat}" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <span class="cat-row-time">${formatTimeShort(ms)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ==================== DAILY GOAL ====================
+function updateDailyGoal(sites, dateKey) {
+  const card = document.getElementById('dailyGoalCard');
+  const bar = document.getElementById('goalBar');
+  const status = document.getElementById('goalStatus');
+  const detail = document.getElementById('goalDetail');
+
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+    const goalMinutes = preferences.dailyGoalMinutes || 0;
+
+    if (!goalMinutes) {
+      card.innerHTML = `
+        <div class="goal-header">
+          <span class="goal-title">Daily Goal</span>
+        </div>
+        <div class="goal-not-set">Set a daily goal in Settings to track your progress</div>
+      `;
+      return;
+    }
+
+    let todayMs = 0;
+    sites.forEach(site => { todayMs += site.dailyTime[dateKey] || 0; });
+
+    const todayMin = todayMs / 60000;
+    const pct = Math.min(Math.round((todayMin / goalMinutes) * 100), 150);
+
+    bar.style.width = Math.min(pct, 100) + '%';
+    bar.className = 'goal-bar';
+
+    if (pct > 100) {
+      bar.classList.add('exceeded');
+      status.textContent = 'Over limit';
+      status.className = 'goal-status over';
+    } else if (pct > 80) {
+      bar.classList.add('warning');
+      status.textContent = 'Almost there';
+      status.className = 'goal-status close';
+    } else {
+      status.textContent = 'On track';
+      status.className = 'goal-status on-track';
+    }
+
+    const remaining = Math.max(0, goalMinutes - todayMin);
+    if (remaining > 0) {
+      detail.textContent = `${formatTimeShort(todayMs)} used of ${formatTimeShort(goalMinutes * 60000)} • ${formatTimeShort(remaining * 60000)} remaining`;
+    } else {
+      const overBy = todayMin - goalMinutes;
+      detail.textContent = `${formatTimeShort(todayMs)} used of ${formatTimeShort(goalMinutes * 60000)} • ${formatTimeShort(overBy * 60000)} over`;
+    }
+  });
+}
+
+// ==================== CURRENT SITE BANNER ====================
+function updateCurrentSite(sites, dateKey) {
+  const banner = document.getElementById('currentSiteBanner');
+
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs[0]?.url || !tabs[0].url.startsWith('http')) {
+      banner.style.display = 'none';
+      return;
+    }
+
+    let domain;
+    try {
+      domain = new URL(tabs[0].url).hostname.replace(/^www\./, '');
+    } catch {
+      banner.style.display = 'none';
+      return;
+    }
+
+    const site = sites.find(s => s.domain === domain || s.domain === 'www.' + domain);
+    const todayTime = site ? (site.dailyTime[dateKey] || 0) : 0;
+
+    document.getElementById('currentSiteDomain').textContent = domain;
+    document.getElementById('currentSiteTime').textContent = formatTime(todayTime);
+    document.getElementById('currentSiteFavicon').src =
+      `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+
+    banner.style.display = 'flex';
+  });
+}
+
+// ==================== INSIGHT TIP ====================
+function updateInsightTip(sites, dateKey) {
+  const el = document.getElementById('insightTip');
+  const today = dateKey;
+
+  let todayTotal = 0;
+  let topSite = null;
+  let topTime = 0;
+  let distractingMs = 0;
+
+  sites.forEach(site => {
+    const t = site.dailyTime[today] || 0;
+    todayTotal += t;
+    if (t > topTime) { topTime = t; topSite = site.domain; }
+    const cat = site.category || 'other';
+    if (DISTRACTING_CATEGORIES.includes(cat)) distractingMs += t;
+  });
+
+  if (todayTotal < 60000) {
+    el.classList.remove('visible');
+    return;
+  }
+
+  const tips = [];
+
+  if (distractingMs > todayTotal * 0.5) {
+    tips.push(`Over half your browsing today is on distracting sites (${formatTimeShort(distractingMs)}). Try a Focus session!`);
+  }
+
+  if (topTime > todayTotal * 0.6 && topSite) {
+    tips.push(`${topSite} dominates your browsing at ${formatTimeShort(topTime)}. Consider setting a time limit.`);
+  }
+
+  const hours = todayTotal / 3600000;
+  if (hours > 5) {
+    tips.push(`You've been browsing for ${formatTimeShort(todayTotal)} today. Time for a break!`);
+  } else if (hours > 2) {
+    tips.push(`${formatTimeShort(todayTotal)} browsed today. Stay mindful of your screen time.`);
+  }
+
+  if (tips.length === 0) {
+    if (distractingMs < todayTotal * 0.2) {
+      tips.push('Great focus today! Most of your time is on productive sites.');
+    } else {
+      tips.push(`${formatTimeShort(todayTotal)} browsed today across ${sites.filter(s => (s.dailyTime[today] || 0) > 0).length} sites.`);
+    }
+  }
+
+  el.textContent = '💡 ' + tips[0];
+  el.classList.add('visible');
+}
+
 // ==================== RENDER SITES ====================
 function renderSites(sites, containerId, dateFilter = null) {
   const container = document.getElementById(containerId);
@@ -424,24 +601,43 @@ function cleanupCharts() {
   if (monthChart) { monthChart.destroy(); monthChart = null; }
 }
 
+function buildChartData(sites, days) {
+  const labels = [];
+  const dataMs = [];
+
+  for (let i = days - 1; i >= 0; i--) {
+    const dateKey = getDateKey(i);
+    labels.push(days <= 7 ? getDayName(dateKey) : getShortDate(dateKey));
+    let totalTime = 0;
+    sites.forEach(site => { totalTime += site.dailyTime[dateKey] || 0; });
+    dataMs.push(totalTime);
+  }
+
+  const maxMs = Math.max(...dataMs);
+  let unit, divisor;
+  if (maxMs >= 60 * 60 * 1000) {
+    unit = 'Hours';
+    divisor = 60 * 60 * 1000;
+  } else {
+    unit = 'Minutes';
+    divisor = 60 * 1000;
+  }
+
+  const data = dataMs.map(ms => +(ms / divisor).toFixed(2));
+  return { labels, data, dataMs, unit, divisor };
+}
+
 function createWeekChart(sites) {
   const ctx = document.getElementById('weekChart');
   if (!ctx) return;
 
-  const labels = [];
-  const data = [];
-
-  for (let i = 6; i >= 0; i--) {
-    const dateKey = getDateKey(i);
-    labels.push(getDayName(dateKey));
-    let totalTime = 0;
-    sites.forEach(site => { totalTime += site.dailyTime[dateKey] || 0; });
-    data.push(Math.round(totalTime / 60000));
-  }
+  const { labels, data, dataMs, unit } = buildChartData(sites, 7);
 
   if (weekChart) {
     weekChart.data.labels = labels;
     weekChart.data.datasets[0].data = data;
+    weekChart.data.datasets[0].label = unit;
+    weekChart.options.scales.y.title.text = unit;
     weekChart.update('none');
     return;
   }
@@ -451,19 +647,36 @@ function createWeekChart(sites) {
     data: {
       labels,
       datasets: [{
-        label: 'Minutes',
+        label: unit,
         data,
-        backgroundColor: 'rgba(102, 126, 234, 0.8)',
-        borderColor: 'rgba(102, 126, 234, 1)',
-        borderWidth: 2,
+        backgroundColor: 'rgba(99, 102, 241, 0.7)',
+        borderColor: 'rgba(99, 102, 241, 1)',
+        borderWidth: 0,
         borderRadius: 6
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' minutes' } } },
-      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          displayColors: false,
+          callbacks: { label: c => formatTime(dataMs[c.dataIndex]) }
+        }
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: unit, font: { size: 11, weight: '600' } },
+          ticks: {
+            precision: 1,
+            callback: v => unit === 'Hours' ? (v >= 1 ? v + 'h' : Math.round(v * 60) + 'm') : v + 'm'
+          },
+          grid: { color: 'rgba(0,0,0,0.05)' }
+        }
+      }
     }
   });
 }
@@ -472,20 +685,13 @@ function createMonthChart(sites) {
   const ctx = document.getElementById('monthChart');
   if (!ctx) return;
 
-  const labels = [];
-  const data = [];
-
-  for (let i = 29; i >= 0; i--) {
-    const dateKey = getDateKey(i);
-    labels.push(getShortDate(dateKey));
-    let totalTime = 0;
-    sites.forEach(site => { totalTime += site.dailyTime[dateKey] || 0; });
-    data.push(Math.round(totalTime / 60000));
-  }
+  const { labels, data, dataMs, unit } = buildChartData(sites, 30);
 
   if (monthChart) {
     monthChart.data.labels = labels;
     monthChart.data.datasets[0].data = data;
+    monthChart.data.datasets[0].label = unit;
+    monthChart.options.scales.y.title.text = unit;
     monthChart.update('none');
     return;
   }
@@ -495,21 +701,38 @@ function createMonthChart(sites) {
     data: {
       labels,
       datasets: [{
-        label: 'Minutes',
+        label: unit,
         data,
-        backgroundColor: 'rgba(102, 126, 234, 0.8)',
-        borderColor: 'rgba(102, 126, 234, 1)',
-        borderWidth: 1,
+        backgroundColor: 'rgba(99, 102, 241, 0.7)',
+        borderColor: 'rgba(99, 102, 241, 1)',
+        borderWidth: 0,
         borderRadius: 4
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y + ' minutes' } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          displayColors: false,
+          callbacks: { label: c => formatTime(dataMs[c.dataIndex]) }
+        }
+      },
       scales: {
-        x: { ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 } } },
-        y: { beginAtZero: true, ticks: { precision: 0 } }
+        x: {
+          ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 } },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: unit, font: { size: 11, weight: '600' } },
+          ticks: {
+            precision: 1,
+            callback: v => unit === 'Hours' ? (v >= 1 ? v + 'h' : Math.round(v * 60) + 'm') : v + 'm'
+          },
+          grid: { color: 'rgba(0,0,0,0.05)' }
+        }
       }
     }
   });
@@ -520,28 +743,26 @@ function updateUI(sessionData) {
   const sites = Object.values(sessionData.sites);
   const today = getDateKey(0);
 
-  // Today's total
   let todayTotal = 0;
   sites.forEach(site => { todayTotal += site.dailyTime[today] || 0; });
   document.getElementById('todayTotal').textContent = formatTime(todayTotal);
 
-  // Productivity score
   const score = calculateProductivityScore(sites, today);
   updateProductivityUI(score);
 
-  // Comparison stats
   updateComparisonStats(sites);
+  updateCategoryBreakdown(sites, today);
+  updateDailyGoal(sites, today);
+  updateCurrentSite(sites, today);
+  updateInsightTip(sites, today);
 
-  // Sites lists
   renderSites(sites, 'todaySites', 'today');
   renderSites(sites, 'weekSites', 'week');
   renderSites(sites, 'monthSites', 'month');
 
-  // Charts
   createWeekChart(sites);
   createMonthChart(sites);
 
-  // Focus mode
   if (sessionData.focusState) {
     updateFocusUI(sessionData.focusState);
   }
@@ -555,7 +776,6 @@ async function loadData() {
   });
 }
 
-// Clean up when popup closes
 window.addEventListener('unload', () => {
   if (refreshInterval) clearInterval(refreshInterval);
   if (focusTimerInterval) clearInterval(focusTimerInterval);
@@ -573,13 +793,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
-// Clear session data
-document.getElementById('clearBtn').addEventListener('click', () => {
-  if (confirm('Are you sure you want to clear all session data? This cannot be undone.')) {
-    chrome.runtime.sendMessage({ action: 'clearSession' }, () => loadData());
-  }
-});
-
 // ==================== DARK MODE ====================
 document.getElementById('darkModeToggle').addEventListener('click', () => {
   chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
@@ -587,17 +800,13 @@ document.getElementById('darkModeToggle').addEventListener('click', () => {
     chrome.storage.local.set({ preferences }, () => {
       document.body.classList.toggle('dark', preferences.darkMode);
       document.getElementById('darkModeToggle').textContent =
-        preferences.darkMode ? '☀' : '⏾';
+        preferences.darkMode ? '☀' : '☾';
     });
   });
 });
 
-// Keep connection alive with background service worker
 const port = chrome.runtime.connect({ name: 'keepAlive' });
 port.onDisconnect.addListener(() => {});
 
-// Load data on popup open
 loadData();
-
-// Refresh data every 5 seconds
 setInterval(loadData, 5000);

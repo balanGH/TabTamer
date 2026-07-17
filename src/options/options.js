@@ -17,69 +17,86 @@ function getDateKey(daysAgo = 0) {
   return d.toISOString().split('T')[0];
 }
 
+function formatTimeHuman(ms) {
+  if (ms < 1000) return '0s';
+  const totalSec = Math.floor(ms / 1000);
+  const mins = Math.floor(totalSec / 60);
+  const hrs = Math.floor(mins / 60);
+
+  if (hrs >= 1) {
+    const remMins = mins % 60;
+    return remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`;
+  }
+  if (mins >= 1) {
+    const remSec = totalSec % 60;
+    return remSec > 0 ? `${mins}m ${remSec}s` : `${mins}m`;
+  }
+  return `${totalSec}s`;
+}
+
 // ------------------ USAGE GRAPH ------------------
 function loadUsageGraph() {
   const range = document.getElementById('usageRange').value;
 
   chrome.storage.local.get(['sites'], ({ sites = {} }) => {
-    const labels = [];
-    const rawData = [];
-    const domainsForLimits = [];
-
-    let maxValue = 0;
+    const entries = [];
 
     Object.entries(sites).forEach(([domain, info]) => {
       let totalMs = 0;
 
       if (range === 'today') {
         totalMs = info.dailyTime?.[getDateKey()] || 0;
-      }
-
-      if (range === 'week') {
+      } else if (range === 'week') {
         for (let i = 0; i < 7; i++) {
           totalMs += info.dailyTime?.[getDateKey(i)] || 0;
         }
-      }
-
-      if (range === 'month') {
+      } else if (range === 'month') {
         for (let i = 0; i < 30; i++) {
           totalMs += info.dailyTime?.[getDateKey(i)] || 0;
         }
       }
 
       if (totalMs > 0) {
-        const normalized = domain.replace(/^www\./, '');
-        labels.push(normalized);
-        rawData.push(totalMs);
-        domainsForLimits.push(normalized);
-        maxValue = Math.max(maxValue, totalMs);
+        entries.push({
+          domain: domain.replace(/^www\./, ''),
+          ms: totalMs
+        });
       }
     });
 
-    populateDomainSelect([...new Set(domainsForLimits)]);
-    if (!labels.length) return;
+    entries.sort((a, b) => b.ms - a.ms);
 
-    let unit, divisor, yMax;
+    populateDomainSelect(entries.map(e => e.domain));
 
-    if (range === 'today') {
-      unit = 'Minutes';
-      divisor = 60000;
-      yMax = maxValue / divisor;
-    } else if (maxValue >= 1000 * 60 * 60 * 24) {
-      unit = 'Days';
-      divisor = 1000 * 60 * 60 * 24;
-      yMax = maxValue / divisor;
-    } else if (maxValue >= 1000 * 60 * 60) {
-      unit = 'Hours';
-      divisor = 1000 * 60 * 60;
-      yMax = maxValue / divisor;
-    } else {
-      unit = 'Minutes';
-      divisor = 60000;
-      yMax = maxValue / divisor;
+    if (!entries.length) {
+      if (chart) { chart.destroy(); chart = null; }
+      return;
     }
 
-    const data = rawData.map(ms => +(ms / divisor).toFixed(1));
+    const labels = entries.map(e => e.domain);
+    const rawMs = entries.map(e => e.ms);
+    const maxMs = Math.max(...rawMs);
+
+    // Auto-scale: use hours if max >= 60min, otherwise minutes
+    let unit, divisor;
+    if (maxMs >= 60 * 60 * 1000) {
+      unit = 'Hours';
+      divisor = 60 * 60 * 1000;
+    } else {
+      unit = 'Minutes';
+      divisor = 60 * 1000;
+    }
+
+    const data = rawMs.map(ms => +(ms / divisor).toFixed(2));
+
+    const isDark = document.body.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const tickColor = isDark ? '#a1a1c7' : '#64748b';
+
+    // Gradient fill
+    const gradient = chartCtx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.85)');
+    gradient.addColorStop(1, 'rgba(139, 92, 246, 0.6)');
 
     if (chart) chart.destroy();
 
@@ -89,29 +106,73 @@ function loadUsageGraph() {
         labels,
         datasets: [{
           label: unit,
-          data
+          data,
+          backgroundColor: gradient,
+          borderColor: 'rgba(99, 102, 241, 1)',
+          borderWidth: 0,
+          borderRadius: 6,
+          borderSkipped: false
         }]
       },
       options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: {
+          padding: { top: 10 }
+        },
         scales: {
+          x: {
+            ticks: {
+              maxRotation: 45,
+              minRotation: 30,
+              font: { size: 11, weight: '500' },
+              color: tickColor
+            },
+            grid: { display: false }
+          },
           y: {
             beginAtZero: true,
-            max: yMax,
-            title: { display: true, text: unit }
+            title: {
+              display: true,
+              text: unit,
+              font: { size: 12, weight: '600' },
+              color: tickColor
+            },
+            ticks: {
+              precision: 1,
+              font: { size: 11 },
+              color: tickColor,
+              callback: function(value) {
+                if (unit === 'Hours') {
+                  if (value >= 1) return value + 'h';
+                  return Math.round(value * 60) + 'm';
+                }
+                return value + 'm';
+              }
+            },
+            grid: {
+              color: gridColor,
+              drawBorder: false
+            }
           }
         },
         plugins: {
+          legend: { display: false },
           tooltip: {
+            backgroundColor: isDark ? '#2a2a3d' : '#1e293b',
+            titleColor: '#fff',
+            bodyColor: '#e2e8f0',
+            titleFont: { weight: '600', size: 13 },
+            bodyFont: { size: 12 },
+            padding: 12,
+            cornerRadius: 8,
+            displayColors: false,
             callbacks: {
-              label: function (context) {
-                const ms = rawData[context.dataIndex];
-                const minutes = Math.floor(ms / 60000);
-                const hours = Math.floor(minutes / 60);
-                const days = Math.floor(hours / 24);
-
-                if (days >= 1) return `${days}d ${hours % 24}h`;
-                else if (hours >= 1) return `${hours}h ${minutes % 60}m`;
-                else return `${minutes}m`;
+              title: function(items) {
+                return items[0].label;
+              },
+              label: function(context) {
+                return formatTimeHuman(rawMs[context.dataIndex]);
               }
             }
           }
@@ -132,7 +193,7 @@ function populateDomainSelect(domains) {
     return;
   }
 
-  select.innerHTML = domains
+  select.innerHTML = [...new Set(domains)]
     .sort()
     .map(d => `<option value="${d}">${d}</option>`)
     .join('');
@@ -157,7 +218,7 @@ function loadLimits() {
     const limitsList = document.getElementById('limitsList');
 
     if (Object.keys(siteLimits).length === 0) {
-      limitsList.innerHTML = '<p>No limits set</p>';
+      limitsList.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:12px 0;">No limits set</p>';
       return;
     }
 
@@ -172,7 +233,7 @@ function loadLimits() {
       .map(([domain, minutes]) => `
         <div class="list-item">
           <span>${domain} – ${minutes} min</span>
-          <button class="remove-btn" data-domain="${domain}">✖</button>
+          <button class="remove-btn" data-domain="${domain}">&#10006;</button>
         </div>
       `)
       .join('');
@@ -256,7 +317,6 @@ document.getElementById('csvExportBtn').onclick = () => {
       return;
     }
 
-    // Collect all unique dates
     const allDates = new Set();
     Object.values(sites).forEach(info => {
       Object.keys(info.dailyTime || {}).forEach(date => allDates.add(date));
@@ -265,11 +325,9 @@ document.getElementById('csvExportBtn').onclick = () => {
     const sortedDates = [...allDates].sort();
     const domains = Object.keys(sites).sort();
 
-    // CSV header
     const header = ['Domain', 'Total (minutes)', ...sortedDates.map(d => d)];
     const rows = [header.join(',')];
 
-    // CSV rows
     domains.forEach(domain => {
       const info = sites[domain];
       const totalMinutes = Math.round((info.totalTime || 0) / 60000);
@@ -283,7 +341,6 @@ document.getElementById('csvExportBtn').onclick = () => {
       ].join(','));
     });
 
-    // Total row
     const totals = sortedDates.map(date => {
       let total = 0;
       Object.values(sites).forEach(info => {
@@ -345,12 +402,54 @@ document.getElementById('importFile').onchange = e => {
   reader.readAsText(file);
 };
 
+// ------------------ DAILY GOAL ------------------
+function loadDailyGoal() {
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+    const goal = preferences.dailyGoalMinutes || 0;
+    document.getElementById('dailyGoal').value = String(goal);
+  });
+}
+
+document.getElementById('saveGoalBtn').onclick = () => {
+  const minutes = parseInt(document.getElementById('dailyGoal').value);
+  chrome.storage.local.get(['preferences'], ({ preferences = {} }) => {
+    preferences.dailyGoalMinutes = minutes;
+    chrome.storage.local.set({ preferences }, () => {
+      const status = document.getElementById('status');
+      status.textContent = minutes > 0
+        ? `Daily goal set to ${minutes >= 60 ? (minutes / 60) + ' hours' : minutes + ' minutes'}`
+        : 'Daily goal disabled';
+      setTimeout(() => { status.textContent = ''; }, 3000);
+    });
+  });
+};
+
+// ------------------ CLEAR ALL DATA ------------------
+document.getElementById('clearAllBtn').onclick = () => {
+  if (!confirm('Are you sure you want to clear ALL data? This cannot be undone.')) return;
+  if (!confirm('This will permanently delete all browsing history, time limits, and settings. Are you really sure?')) return;
+
+  chrome.storage.local.clear(() => {
+    chrome.runtime.sendMessage({ action: 'clearSession' }, () => {
+      const status = document.getElementById('status');
+      status.textContent = 'All data has been cleared';
+      status.style.color = '#ef4444';
+      loadAll();
+      setTimeout(() => {
+        status.textContent = '';
+        status.style.color = '';
+      }, 3000);
+    });
+  });
+};
+
 // ------------------ INIT ------------------
 function loadAll() {
   loadUsageGraph();
   loadLimits();
   loadCssList();
   loadBreakSettings();
+  loadDailyGoal();
 }
 
 loadAll();

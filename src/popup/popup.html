@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TabTamer ( Time Tracker )</title>
+  <title>TabTamer</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 
@@ -13,19 +13,19 @@
     <header>
       <h1>TabTamer</h1>
       <div class="header-actions">
-        <button id="focusModeBtn" class="icon-btn" title="Focus Mode (Alt+F)">🎯</button>
-        <button id="blockElementBtn" class="icon-btn" title="Block Element (Alt+P)">⛶</button>
-        <button id="videoSpeedBtn" class="icon-btn" title="Video Speed Controller">🎬</button>
-        <button id="darkModeToggle" class="icon-btn" title="Toggle Dark Mode">⏾</button>
-        <button id="audioToggle" class="icon-btn" title="Track Audio Tabs">🔇</button>
-        <button id="settingsBtn" class="icon-btn" title="Settings">⚙️</button>
+        <button id="focusModeBtn" class="icon-btn" title="Focus Mode (Alt+F)">&#127919;</button>
+        <button id="blockElementBtn" class="icon-btn" title="Block Element (Alt+P)">&#9974;</button>
+        <button id="videoSpeedBtn" class="icon-btn" title="Video Speed Controller">&#127916;</button>
+        <button id="darkModeToggle" class="icon-btn" title="Toggle Dark Mode">&#9790;</button>
+        <button id="audioToggle" class="icon-btn" title="Track Audio Tabs">&#128263;</button>
+        <button id="settingsBtn" class="icon-btn" title="Settings">&#9881;</button>
       </div>
     </header>
 
     <!-- Focus Mode Banner -->
     <div id="focusBanner" class="focus-banner" style="display:none;">
       <div class="focus-banner-content">
-        <span class="focus-icon">🎯</span>
+        <span class="focus-icon">&#127919;</span>
         <div class="focus-info">
           <div class="focus-label">Focus Mode Active</div>
           <div class="focus-timer" id="focusTimer">00:00</div>
@@ -55,6 +55,16 @@
       </div>
     </div>
 
+    <!-- Current Site Live Indicator -->
+    <div id="currentSiteBanner" class="current-site-banner" style="display:none;">
+      <img id="currentSiteFavicon" class="current-site-favicon" src="" alt="" />
+      <div class="current-site-info">
+        <div class="current-site-domain" id="currentSiteDomain">--</div>
+        <div class="current-site-label">Currently Browsing</div>
+      </div>
+      <div class="current-site-time" id="currentSiteTime">0m</div>
+    </div>
+
     <nav class="tabs">
       <button class="tab-btn active" data-tab="today">Today</button>
       <button class="tab-btn" data-tab="week">Week</button>
@@ -65,11 +75,11 @@
       <div id="today" class="tab-panel active">
         <div class="stats-summary">
           <div class="stat-card">
-            <div class="stat-label">Total Time Today</div>
+            <div class="stat-label">Total Time</div>
             <div class="stat-value" id="todayTotal">0m</div>
           </div>
           <div class="stat-card productivity-card">
-            <div class="stat-label">Productivity Score</div>
+            <div class="stat-label">Productivity</div>
             <div class="productivity-row">
               <div class="stat-value" id="productivityScore">--</div>
               <div class="productivity-bar-container">
@@ -89,6 +99,24 @@
             <span class="comparison-label">vs Last Week Avg</span>
             <span class="comparison-value" id="vsLastWeek">--</span>
           </div>
+        </div>
+
+        <!-- Category Breakdown -->
+        <div class="category-breakdown">
+          <h3>Time by Category</h3>
+          <div class="category-bars" id="categoryBars"></div>
+        </div>
+
+        <!-- Daily Goal -->
+        <div class="daily-goal-card" id="dailyGoalCard">
+          <div class="goal-header">
+            <span class="goal-title">Daily Goal</span>
+            <span class="goal-status" id="goalStatus">--</span>
+          </div>
+          <div class="goal-bar-container">
+            <div class="goal-bar" id="goalBar" style="width:0%"></div>
+          </div>
+          <div class="goal-detail" id="goalDetail"></div>
         </div>
 
         <div class="top-sites">
@@ -118,9 +146,11 @@
       </div>
     </div>
 
+    <!-- Insight Tip -->
+    <div class="insight-tip" id="insightTip"></div>
+
     <footer>
-      <button id="clearBtn" class="clear-btn">Clear Session Data</button>
-      <div class="session-note">Session data resets when Chrome closes</div>
+      <div class="session-note">Manage data & limits in Settings</div>
     </footer>
   </div>
 

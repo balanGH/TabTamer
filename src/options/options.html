@@ -3,44 +3,57 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>TabTamer – Advanced Settings</title>
+  <title>TabTamer Settings</title>
   <link rel="stylesheet" href="options.css" />
 </head>
 
 <body>
   <div class="container">
-    <h1>TabTamer Settings</h1>
+    <div class="page-header">
+      <h1>TabTamer Settings</h1>
+      <p>Manage your browsing limits, reminders, and preferences</p>
+    </div>
 
     <!-- USAGE GRAPH -->
     <section class="card">
-      <h2>Site Usage</h2>
-
+      <div class="card-header">
+        <div class="card-icon">&#128202;</div>
+        <h2>Site Usage</h2>
+      </div>
       <div class="row">
         <select id="usageRange">
           <option value="today">Today</option>
-          <option value="week">Week</option>
-          <option value="month">Month</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
         </select>
       </div>
-
-      <canvas id="usageChart"></canvas>
+      <div class="chart-wrapper">
+        <canvas id="usageChart"></canvas>
+      </div>
     </section>
 
     <!-- TIME LIMITS -->
     <section class="card">
-      <h2>Set Daily Time Limit</h2>
+      <div class="card-header">
+        <div class="card-icon">&#9200;</div>
+        <h2>Daily Time Limits</h2>
+      </div>
+      <p class="card-description">Set maximum daily browsing time per site. You'll be notified when you're close to the limit.</p>
       <div class="row">
         <select id="domainSelect"></select>
         <input type="number" id="limitMinutes" placeholder="Minutes" />
-        <button id="setLimitBtn">Set</button>
+        <button id="setLimitBtn">Set Limit</button>
       </div>
       <div id="limitsList"></div>
     </section>
 
     <!-- BREAK REMINDERS -->
     <section class="card">
-      <h2>Break Reminders</h2>
-      <p class="card-description">Get notified to take a break after continuous browsing.</p>
+      <div class="card-header">
+        <div class="card-icon">&#9749;</div>
+        <h2>Break Reminders</h2>
+      </div>
+      <p class="card-description">Get notified to take a break after continuous browsing. Helps reduce eye strain and improve focus.</p>
       <div class="row">
         <select id="breakInterval">
           <option value="0">Disabled</option>
@@ -57,20 +70,32 @@
 
     <!-- ELEMENT / CSS BLOCK -->
     <section class="card">
-      <h2>Custom CSS / Element Block</h2>
+      <div class="card-header">
+        <div class="card-icon">&#128683;</div>
+        <h2>Element Blocker</h2>
+      </div>
+      <p class="card-description">Hide distracting elements on specific websites using CSS selectors.</p>
       <div class="row">
         <input id="cssDomain" placeholder="example.com" />
-        <textarea id="cssRules" placeholder=".shorts, #ads { display:none }"></textarea>
-        <button id="saveCssBtn">Save</button>
+      </div>
+      <div class="row">
+        <textarea id="cssRules" placeholder=".shorts, #ads, .sidebar-ads"></textarea>
+      </div>
+      <div class="row">
+        <button id="saveCssBtn">Save Rule</button>
       </div>
       <div id="cssList"></div>
     </section>
 
     <!-- BACKUP & EXPORT -->
     <section class="card">
-      <h2>Backup & Export</h2>
+      <div class="card-header">
+        <div class="card-icon">&#128190;</div>
+        <h2>Backup & Export</h2>
+      </div>
+      <p class="card-description">Export your data as JSON backup or CSV spreadsheet. Import a previous backup to restore settings.</p>
       <div class="button-row">
-        <button id="exportBtn">Export JSON Backup</button>
+        <button id="exportBtn">Export JSON</button>
         <button id="csvExportBtn">Export CSV</button>
         <input type="file" id="importFile" hidden />
         <button id="importBtn">Import Backup</button>
@@ -78,9 +103,34 @@
       <p id="status"></p>
     </section>
 
+    <!-- DAILY GOAL -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-icon">&#127937;</div>
+        <h2>Daily Goal</h2>
+      </div>
+      <p class="card-description">Set a daily browsing time goal. Your progress is shown in the popup dashboard.</p>
+      <div class="row">
+        <select id="dailyGoal">
+          <option value="0">No goal</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+          <option value="180">3 hours</option>
+          <option value="240">4 hours</option>
+          <option value="360">6 hours</option>
+          <option value="480">8 hours</option>
+        </select>
+        <button id="saveGoalBtn">Save</button>
+      </div>
+    </section>
+
     <!-- KEYBOARD SHORTCUTS -->
     <section class="card">
-      <h2>Keyboard Shortcuts</h2>
+      <div class="card-header">
+        <div class="card-icon">&#9000;</div>
+        <h2>Keyboard Shortcuts</h2>
+      </div>
+      <p class="card-description">Quick actions available from any tab.</p>
       <div class="shortcut-list">
         <div class="shortcut-item">
           <span class="shortcut-label">Toggle Focus Mode</span>
@@ -91,10 +141,20 @@
           <kbd>Alt + P</kbd>
         </div>
         <div class="shortcut-item">
-          <span class="shortcut-label">Right-click any element</span>
-          <span class="shortcut-note">Context menu → "Block this element"</span>
+          <span class="shortcut-label">Block via Context Menu</span>
+          <span class="shortcut-note">Right-click any element</span>
         </div>
       </div>
+    </section>
+
+    <!-- DANGER ZONE -->
+    <section class="card danger-card">
+      <div class="card-header">
+        <div class="card-icon danger-icon">&#9888;</div>
+        <h2>Danger Zone</h2>
+      </div>
+      <p class="card-description">Permanently delete all your browsing data, time limits, and preferences. This cannot be undone.</p>
+      <button id="clearAllBtn" class="danger-btn">Clear All Data</button>
     </section>
   </div>
 
