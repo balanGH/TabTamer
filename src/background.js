@@ -113,7 +113,8 @@ const SITE_CATEGORIES = {
   social: ['facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'tiktok.com', 'snapchat.com', 'reddit.com', 'linkedin.com', 'pinterest.com', 'tumblr.com', 'discord.com', 'threads.net', 'mastodon.social'],
   entertainment: ['youtube.com', 'netflix.com', 'twitch.tv', 'hulu.com', 'disneyplus.com', 'spotify.com', 'soundcloud.com', 'primevideo.com', 'crunchyroll.com', 'vimeo.com'],
   news: ['cnn.com', 'bbc.com', 'bbc.co.uk', 'nytimes.com', 'foxnews.com', 'reuters.com', 'apnews.com', 'theguardian.com', 'washingtonpost.com'],
-  work: ['dev.azure.com', 'github.com', 'gitlab.com', 'bitbucket.org', 'stackoverflow.com', 'docs.google.com', 'drive.google.com', 'notion.so', 'slack.com', 'trello.com', 'jira.atlassian.com', 'confluence.atlassian.com', 'figma.com', 'linear.app', 'vercel.com', 'netlify.com'],
+  work: ['dev.azure.com', 'localhost:*', 'github.com', 'gitlab.com', 'bitbucket.org', 'stackoverflow.com', 'docs.google.com', 'drive.google.com', 'notion.so', 'slack.com', 'trello.com', 'jira.atlassian.com', 'confluence.atlassian.com', 'figma.com', 'linear.app', 'vercel.com', 'netlify.com'],
+  study: ['*.udemy.com'],
   shopping: ['amazon.com', 'amazon.in', 'ebay.com', 'walmart.com', 'etsy.com', 'aliexpress.com', 'flipkart.com', 'myntra.com']
 };
 

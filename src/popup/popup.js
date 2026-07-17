@@ -262,7 +262,7 @@ function getShortDate(dateKey) {
 }
 
 // ==================== PRODUCTIVITY SCORE ====================
-const PRODUCTIVE_CATEGORIES = ['work'];
+const PRODUCTIVE_CATEGORIES = ['work', 'study'];
 const DISTRACTING_CATEGORIES = ['social', 'entertainment', 'shopping'];
 
 function calculateProductivityScore(sites, dateKey) {
